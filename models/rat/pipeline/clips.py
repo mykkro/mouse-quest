@@ -23,16 +23,16 @@ FPS = 30
 
 PARAMS = {
     "Idle": dict(length=4.0, breath_cycles=6, breath_amp=0.015, tail_cycles=2, tail_amp=0.12,
-                 look_amp=0.1, ear_at=1.1, ear_amp=0.3, blink_at=2.6),
+                 look_amp=0.1, ear_at=1.1, ear_amp=0.3, ear_follow_amp=0.08, blink_at=2.6),
     "Sniff": dict(length=4.0, look_up=-0.25, look_side=0.35, nose_cycles=24, nose_amp=0.08,
-                  jaw_cycles=12, jaw_amp=0.04, breath_cycles=12),
+                  jaw_cycles=12, jaw_amp=0.04, breath_cycles=12, ear_amp=0.06),
     # Walk/Run play several gait cycles per clip so each stride fits the legs (see plan).
     "Walk": dict(gait=GaitParams(length=1.0, cycles=3, speed=0.25, duty=0.65, step_height=0.012,
                                  phases={"LH": 0.0, "LF": 0.25, "RH": 0.5, "RF": 0.75}),
-                 bob=0.002, sway=0.04, tail_amp=0.15),
+                 bob=0.002, sway=0.04, tail_amp=0.15, ear_amp=0.1),
     "Run": dict(gait=GaitParams(length=0.4, cycles=2, speed=0.8, duty=0.3, step_height=0.02,
                                 phases={"LH": 0.0, "RH": 0.05, "LF": 0.5, "RF": 0.6}),
-                flex=0.12, bob=0.004, pitch=0.08, tail_amp=0.1),
+                flex=0.12, bob=0.004, pitch=0.08, tail_amp=0.1, ear_amp=0.15),
     "Jump_Start": dict(length=0.3, crouch_at=0.18),
     "Jump_Air": dict(length=0.5, paddle=0.004, tail_amp=0.05),
     "Jump_Land": dict(length=0.35, absorb_at=0.12),
@@ -42,7 +42,7 @@ PARAMS = {
     "Rear_Loop": dict(length=3.0, look_amp=0.3, nod_amp=0.1, nose_cycles=18, nose_amp=0.08,
                       breath_cycles=9),
     "Rear_End": dict(length=0.5),
-    "Eat": dict(length=2.0, chew_cycles=8, jaw_amp=0.15, paw_amp=0.05),
+    "Eat": dict(length=2.0, chew_cycles=8, jaw_amp=0.15, paw_amp=0.05, ear_amp=0.04),
     "Death": dict(length=1.5, stagger_at=0.3, down_at=0.8, twitch_at=1.05, twitch_len=0.3),
 }
 
@@ -100,6 +100,16 @@ def tail_wave(t, length, cycles, amp, ch="rz", lag=0.6, decay=0.8):
     """Travelling wave down the tail: each segment lags and shrinks."""
     return {f"{b}.{ch}": amp * decay ** i * math.sin(2 * math.pi * cycles * t / length - lag * i)
             for i, b in enumerate(TAIL)}
+
+
+def ear_follow(t, length, cycles, amp, lag=0.8, decay=0.6):
+    """Ears trail the body: Ear0 then Ear1 lag and shrink; the right side is mirrored."""
+    out = {}
+    for sgn, side in ((1, "L"), (-1, "R")):
+        for i in range(2):
+            out[f"FACIAL_{side}_Ear{i}.ry"] = sgn * amp * decay ** i * math.sin(
+                2 * math.pi * cycles * t / length - lag * (i + 1))
+    return out
 
 
 def blink(t, start, dur=0.18, close=0.6):
@@ -168,6 +178,7 @@ def idle(t, rig):
                tail_wave(t, L, P["tail_cycles"], P["tail_amp"]),
                {"SKEL_Head.rz": P["look_amp"] * osc(t, L, 1),
                 "FACIAL_L_Ear0.ry": P["ear_amp"] * bump(t, P["ear_at"], 0.25)},
+               ear_follow(t, L, P["tail_cycles"], P["ear_follow_amp"]),
                blink(t, P["blink_at"]))
 
 
@@ -181,7 +192,8 @@ def sniff(t, rig):
                {"FACIAL_Nose.rx": P["nose_amp"] * osc(t, L, P["nose_cycles"]),
                 "FACIAL_C_Jaw.rx": P["jaw_amp"] * max(0.0, osc(t, L, P["jaw_cycles"]))},
                breathing(t, L, P["breath_cycles"], 0.01),
-               tail_wave(t, L, 2, 0.08))
+               tail_wave(t, L, 2, 0.08),
+               ear_follow(t, L, 2, P["ear_amp"]))
 
 
 def walk(t, rig):
@@ -190,8 +202,9 @@ def walk(t, rig):
     L, n = g.length, g.cycles
     sway = P["sway"] * osc(t, L, n)
     body = {"SKEL_Pelvis.z": -P["bob"] * math.cos(2 * math.pi * 2 * n * t / L),
-            "SKEL_Pelvis.rz": sway, "SKEL_Spine1.rz": -0.5 * sway, "SKEL_Spine3.rz": -0.5 * sway}
-    return add(stabilize_head(body, 0.5), gait_legs(g, t), tail_wave(t, L, n, P["tail_amp"], lag=0.7))
+            "SKEL_Pelvis.rz": sway, "SKEL_Spine1.rz": -0.25 * sway, "SKEL_Spine3.rz": -0.25 * sway}
+    return add(stabilize_head(body, 0.5), gait_legs(g, t), tail_wave(t, L, n, P["tail_amp"], lag=0.7),
+               ear_follow(t, L, n, P["ear_amp"]))
 
 
 def run(t, rig):
@@ -203,7 +216,8 @@ def run(t, rig):
             "SKEL_Pelvis.rx": P["pitch"] * osc(t, L, n, 0.25),
             **each(SPINE, "rx", 4 * P["flex"] * flex)}
     return add(stabilize_head(body, 0.7), gait_legs(g, t),
-               {"SKEL_Tail0.rx": -0.1 * flex}, tail_wave(t, L, n, P["tail_amp"], ch="rx"))
+               {"SKEL_Tail0.rx": -0.1 * flex}, tail_wave(t, L, n, P["tail_amp"], ch="rx"),
+               ear_follow(t, L, n, P["ear_amp"]))
 
 
 def jump_start(t, rig):
@@ -265,7 +279,8 @@ def eat(t, rig):
     chew = 0.5 + 0.5 * osc(t, L, n)
     return add(SIT, {"FACIAL_C_Jaw.rx": P["jaw_amp"] * chew,
                      **both("SKEL_{}_Forearm.rx", P["paw_amp"] * osc(t, L, n)),
-                     "SKEL_Head.rx": 0.03 * osc(t, L, n, 0.25)})
+                     "SKEL_Head.rx": 0.03 * osc(t, L, n, 0.25)},
+               ear_follow(t, L, n, P["ear_amp"]))
 
 
 def death(t, rig):

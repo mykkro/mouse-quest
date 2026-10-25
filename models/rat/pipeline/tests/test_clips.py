@@ -113,3 +113,40 @@ def test_write_expected_prints_spec():
     assert list(out["clips"]) == [n for n, _, _ in SPEC]
     assert out["clips"]["Jump_Land"]["duration"] == pytest.approx(11 / 30)
     assert out["clipSpeeds"] == CLIP_SPEEDS
+
+
+def _fine(name, n=1000):
+    L = CLIPS[name].length
+    ts = [L * i / n for i in range(n)]
+    return ts, [sample(name, t, RIG) for t in ts]
+
+
+@pytest.mark.parametrize("name", ["Idle", "Walk", "Run"])
+def test_ears_follow_with_lag(name):
+    ts, poses = _fine(name)
+    L = CLIPS[name].length
+    for side in "LR":
+        e0 = [p.get(f"FACIAL_{side}_Ear0.ry", 0.0) for p in poses]
+        e1 = [p.get(f"FACIAL_{side}_Ear1.ry", 0.0) for p in poses]
+        assert max(abs(v) for v in e0) > 1e-3 and max(abs(v) for v in e1) > 1e-3
+        assert max(abs(v) for v in e1) < max(abs(v) for v in e0)
+    # Right side (mirrored, no twitch layer): compare the first positive peak of one period.
+    period = L / {"Idle": 2, "Walk": 3, "Run": 2}[name]
+    first = [i for i, t in enumerate(ts) if t < period]
+    e0 = [-poses[i]["FACIAL_R_Ear0.ry"] for i in first]
+    e1 = [-poses[i]["FACIAL_R_Ear1.ry"] for i in first]
+    delta = (ts[first[e1.index(max(e1))]] - ts[first[e0.index(max(e0))]]) % L
+    assert 0.0 < delta < L / 2
+
+
+@pytest.mark.parametrize("name,ch", [("Walk", "rz"), ("Run", "rx")])
+def test_head_is_stabilised_against_body(name, ch):
+    _, poses = _fine(name)
+    seen = False
+    for p in poses:
+        body = sum(p.get(f"{b}.{ch}", 0.0) for b in ["SKEL_Pelvis", *clips.SPINE])
+        neck = p.get(f"SKEL_Neck0.{ch}", 0.0)
+        if abs(body) > 1e-6:
+            assert neck * body < 0
+            seen = True
+    assert seen
