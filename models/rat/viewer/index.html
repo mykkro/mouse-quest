@@ -33,6 +33,7 @@
 // Reference for game code:
 //  - Clips are in place. Move the rat yourself at gltf.scene.userData.clipSpeeds[clip] m/s
 //    along its local +Z (Walk 0.25, Run 0.8) so the feet don't slide.
+//  - Jump_Start -> Jump_Air is not pose-continuous: use a short crossfade between them.
 //  - One-shots play once and hold their last frame (LoopOnce + clampWhenFinished).
 //  - Turn_L/Turn_R end rotated ±90° relative to the root: when they finish, add the
 //    rotation to the object (rotation.y += ±PI/2) and switch to Idle with no crossfade.
@@ -90,11 +91,37 @@ for (const [name, action] of Object.entries(actions)) {
 }
 
 let current = null;
+// Weight ramps (action -> {from, to, t, dur}). three.js fades always run 0->1 / 1->0, so a
+// clip re-selected while still fading out would pop; these ramps start from the current weight.
+const ramps = new Map();
+function ramp(action, to, dur) {
+  ramps.set(action, { from: action.getEffectiveWeight(), to, t: 0, dur });
+}
+function stepRamps(dt) {
+  for (const [action, r] of ramps) {
+    r.t += dt;
+    const k = Math.min(1, r.t / r.dur);
+    action.setEffectiveWeight(r.from + (r.to - r.from) * k);
+    if (k >= 1) { ramps.delete(action); if (r.to === 0) action.stop(); }
+  }
+}
 function play(name, fade = Number($('fade').value)) {
   const next = actions[name];
-  next.reset().setEffectiveWeight(1).play();
-  if (current && current !== next) {
-    if (fade > 0) current.crossFadeTo(next, fade, false); else current.stop();
+  const prev = current;
+  if (prev && prev !== next && fade > 0) {
+    const finishedHold = ONE_SHOTS.has(name) && next.time >= next.getClip().duration;
+    if (next.isRunning() && next.getEffectiveWeight() > 0 && !finishedHold) {
+      ramp(next, 1, fade); // still fading out: keep its time, fade back in from where it is
+    } else {
+      next.reset().setEffectiveWeight(0).play();
+      ramps.delete(next);
+      ramp(next, 1, fade);
+    }
+    ramp(prev, 0, fade);
+  } else {
+    ramps.delete(next);
+    next.reset().setEffectiveWeight(1).play();
+    if (prev && prev !== next) { ramps.delete(prev); prev.stop(); }
   }
   current = next;
   for (const b of $('clips').children) b.classList.toggle('active', b.textContent === name);
@@ -104,7 +131,7 @@ function play(name, fade = Number($('fade').value)) {
 
 mixer.addEventListener('finished', (e) => {
   const name = e.action.getClip().name;
-  if (name in TURNS) {
+  if (e.action === current && name in TURNS) {
     rat.rotation.y += TURNS[name];
     play('Idle', 0);
   }
@@ -137,6 +164,7 @@ const clock = new THREE.Clock();
 const before = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
+  stepRamps(dt);
   mixer.update(dt);
   const name = current?.getClip().name;
   if ($('move').checked && speeds[name]) {
