@@ -35,6 +35,7 @@ fi
 if stage anims; then
   bl "$RAT/build/02_skeleton.blend" 03_anims.py
   bl "$RAT/build/rat.blend" verify/check_anims.py
+  bl "$RAT/build/rat.blend" verify/render_clips.py
 fi
 
 echo "build.sh: OK"

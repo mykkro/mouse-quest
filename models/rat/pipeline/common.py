@@ -153,3 +153,28 @@ def action_fcurves(action):
         for strip in layer.strips:
             for bag in strip.channelbags:
                 yield from bag.fcurves
+
+
+def load_pixels(path):
+    """Image file -> float32 HxWx4 array, row 0 at the top."""
+    img = bpy.data.images.load(path)
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    bpy.data.images.remove(img)
+    return np.flipud(px.reshape(h, w, 4))
+
+
+def save_pixels(arr, path, colorspace="sRGB"):
+    """HxWx3 or HxWx4 array (row 0 at the top, values 0..1) -> 8-bit PNG."""
+    h, w = arr.shape[:2]
+    rgba = np.ones((h, w, 4), dtype=np.float32)
+    rgba[..., :arr.shape[2]] = arr[..., :4]
+    img = bpy.data.images.new(os.path.basename(path), w, h, alpha=True)
+    img.colorspace_settings.name = colorspace
+    img.pixels.foreach_set(np.flipud(rgba).ravel())
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+    bpy.data.images.remove(img)
