@@ -38,6 +38,22 @@ def check_fk_channel(arm):
     check(con.influence == 1.0, f"apply_pose(arm, {{}}) must restore {LEGS['LH']} IK influence to 1, got {con.influence}")
 
 
+RUN_HEAD_MIN_Z = 0.03  # m; the pre-fix Run bottomed out at 0.0282, the fixed one at 0.0396
+
+
+def check_run_head_clearance(arm):
+    """Run's SKEL_Head must stay above RUN_HEAD_MIN_Z on every frame (baked action, IK muted)."""
+    scene = bpy.context.scene
+    arm.animation_data.action = bpy.data.actions["Run"]
+    lows = []
+    for f in range(clips.CLIPS["Run"].frames + 1):
+        scene.frame_set(f)
+        lows.append(arm.pose.bones["SKEL_Head"].head.z)
+    arm.animation_data.action = None
+    print(f"check_anims: Run head z min {min(lows):.4f} m")
+    check(min(lows) > RUN_HEAD_MIN_Z, f"Run: head z {min(lows):.4f} <= {RUN_HEAD_MIN_Z}")
+
+
 def main():
     args = common.script_args()
     expect_locked = args[args.index("--expect-locked") + 1] if "--expect-locked" in args else None
@@ -68,6 +84,7 @@ def main():
     if expect_locked:
         check(bpy.data.actions[expect_locked].get("sentinel") == 123,
               f"locked clip {expect_locked} was regenerated (sentinel lost)")
+    check_run_head_clearance(arm)
     print("check_anims: OK")
 
 

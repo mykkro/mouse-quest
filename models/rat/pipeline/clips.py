@@ -37,7 +37,7 @@ PARAMS = {
     "Run": dict(gait=GaitParams(length=0.4, cycles=2, speed=0.8, duty=0.3, step_height=0.02,
                                 phases={"LH": 0.0, "RH": 0.05, "LF": 0.5, "RF": 0.6},
                                 centres={"LF": 0.009, "RF": 0.009}),
-                flex=0.12, bob=0.004, pitch=0.08, tail_amp=0.1, ear_amp=0.15),
+                flex=0.07, bob=0.004, pitch=0.05, tail_amp=0.1, ear_amp=0.15),
     "Jump_Start": dict(length=0.3, crouch_at=0.18),
     "Jump_Air": dict(length=0.5, paddle=0.004, tail_amp=0.05),
     "Jump_Land": dict(length=0.35, absorb_at=0.12),
@@ -171,8 +171,8 @@ SIT = {"SKEL_Pelvis.rx": -0.6, "SKEL_Pelvis.z": -0.004, **each(SPINE, "rx", -0.2
        **both("SKEL_{}_UpperArm.rx", -0.6), **both("SKEL_{}_Forearm.rx", -1.2), **both("SKEL_{}_Hand.rx", -0.4)}
 STAGGER = {"SKEL_Pelvis.ry": 0.2, "SKEL_Pelvis.rz": 0.15, "SKEL_Neck0.rx": 0.3,
            "IK_RF.y": -0.01, "IK_RF.z": 0.006}
-# Ry > 0 rolls the back toward +X, so the rat lies on its right side.
-ON_SIDE = {"SKEL_Pelvis.ry": 1.45, "SKEL_Pelvis.z": -0.04, "SKEL_Pelvis.x": -0.025,
+# Ry < 0 rolls the rat onto its right side (verified: left limbs end highest, right limbs on the ground).
+ON_SIDE = {"SKEL_Pelvis.ry": -1.45, "SKEL_Pelvis.z": -0.04, "SKEL_Pelvis.x": 0.025,
            "SKEL_Neck0.rx": 0.2, "SKEL_Neck0.ry": 0.15, **{f"IK_{leg}.fk": 1.0 for leg in LEGS},
            "SKEL_L_Thigh.rx": 0.3, "SKEL_R_Thigh.rx": 0.2, "SKEL_L_UpperArm.rx": -0.3, "SKEL_R_UpperArm.rx": -0.2,
            "SKEL_Tail0.rz": 0.3, "SKEL_Tail1.rz": 0.2, "FACIAL_C_Jaw.rx": 0.08,
