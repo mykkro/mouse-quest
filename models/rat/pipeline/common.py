@@ -145,3 +145,11 @@ def render_view(cam, view, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.context.scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
+
+
+def action_fcurves(action):
+    """All F-curves of a (Blender 5 layered) action."""
+    for layer in action.layers:
+        for strip in layer.strips:
+            for bag in strip.channelbags:
+                yield from bag.fcurves
