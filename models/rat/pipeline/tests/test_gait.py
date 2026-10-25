@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 from gait import GaitParams, foot_offset, in_stance, smoothstep
@@ -52,3 +54,29 @@ def test_walk_lifts_legs_in_lateral_sequence():
     lift = {leg: next(t for t in ts if in_stance(WALK, leg, t - DT) and not in_stance(WALK, leg, t))
             for leg in WALK.phases}
     assert sorted(lift, key=lift.get) == ["LH", "LF", "RH", "RF"]
+
+
+CENTRED = dataclasses.replace(WALK, centres={"LF": 0.012, "RF": 0.015, "LH": -0.004})
+
+
+def test_centres_shift_the_stride():
+    for leg in WALK.phases:
+        c = CENTRED.centres.get(leg, 0.0)
+        for t in grid(WALK, 300):
+            a, b = foot_offset(WALK, leg, t), foot_offset(CENTRED, leg, t)
+            assert b == pytest.approx((a[0], a[1] + c, a[2]), abs=1e-12)
+
+
+def test_centred_stance_slides_back_at_ground_speed():
+    for leg in CENTRED.phases:
+        for t in grid(CENTRED):
+            if in_stance(CENTRED, leg, t) and in_stance(CENTRED, leg, t + DT):
+                y0 = foot_offset(CENTRED, leg, t)[1]
+                y1 = foot_offset(CENTRED, leg, t + DT)[1]
+                assert (y1 - y0) / DT == pytest.approx(CENTRED.speed, rel=1e-6)
+                assert foot_offset(CENTRED, leg, t)[2] == 0.0
+
+
+def test_centred_clip_loops():
+    for leg in CENTRED.phases:
+        assert foot_offset(CENTRED, leg, 0.0) == pytest.approx(foot_offset(CENTRED, leg, CENTRED.length), abs=1e-9)

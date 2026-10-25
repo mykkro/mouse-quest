@@ -20,6 +20,7 @@ class GaitParams:
     duty: float         # fraction of a cycle each foot is on the ground
     step_height: float  # m, peak lift during swing
     phases: dict        # leg -> lift-off time as a fraction of the cycle
+    centres: dict | None = None  # leg -> y offset of the stride centre from rest (default 0)
 
     @property
     def period(self):
@@ -44,8 +45,9 @@ def foot_offset(g, leg, t):
     u = _phase(g, leg, t)
     swing = 1.0 - g.duty
     r = g.reach
-    if u < swing:  # lifted, moving forward from +r/2 to -r/2
+    c = (g.centres or {}).get(leg, 0.0)
+    if u < swing:  # lifted, moving forward from c + r/2 to c - r/2
         s = u / swing
-        return (0.0, r / 2 - r * smoothstep(s), g.step_height * math.sin(math.pi * s))
-    s = (u - swing) / g.duty  # planted, sliding back from -r/2 to +r/2 at `speed`
-    return (0.0, -r / 2 + r * s, 0.0)
+        return (0.0, c + r / 2 - r * smoothstep(s), g.step_height * math.sin(math.pi * s))
+    s = (u - swing) / g.duty  # planted, sliding back from c - r/2 to c + r/2 at `speed`
+    return (0.0, c - r / 2 + r * s, 0.0)

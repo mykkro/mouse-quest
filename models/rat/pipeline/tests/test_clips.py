@@ -150,3 +150,40 @@ def test_head_is_stabilised_against_body(name, ch):
             assert neck * body < 0
             seen = True
     assert seen
+
+
+def test_base_crouch_in_range():
+    assert 0.006 <= clips.PARAMS["Base"]["crouch"] <= 0.015
+
+
+@pytest.mark.parametrize("name", [n for n, _, _ in SPEC])
+def test_every_clip_stands_in_the_crouch(name):
+    crouch = clips.PARAMS["Base"]["crouch"]
+    for t in times(CLIPS[name]):
+        raw = CLIPS[name].fn(t, RIG)
+        p = sample(name, t, RIG)
+        assert p["SKEL_Pelvis.z"] == pytest.approx(raw.get("SKEL_Pelvis.z", 0.0) - crouch, abs=1e-12)
+        assert close({k: v for k, v in p.items() if k != "SKEL_Pelvis.z"},
+                     {k: v for k, v in raw.items() if k != "SKEL_Pelvis.z"}, 0.0)
+
+
+@pytest.mark.parametrize("pose,clip", [("REAR", "Rear_Loop"), ("SIT", "Eat")])
+def test_hind_paws_planted_under_the_pelvis(pose, clip):
+    """REAR/SIT move the hind paws forward (under the pelvis); the held clip keeps them there."""
+    P = getattr(clips, pose)
+    for leg in ("LH", "RH"):
+        assert P[f"IK_{leg}.y"] < 0.0  # forward of rest
+        for t in times(CLIPS[clip]):
+            p = sample(clip, t, RIG)
+            for ch in "xyz":
+                assert p.get(f"IK_{leg}.{ch}", 0.0) == pytest.approx(P.get(f"IK_{leg}.{ch}", 0.0), abs=1e-12)
+
+
+def test_rear_transitions_carry_the_hind_paws():
+    """Rear_Start ends and Rear_End starts with the re-authored REAR, hind-paw offsets included."""
+    end = sample("Rear_Start", CLIPS["Rear_Start"].length, RIG)
+    start = sample("Rear_End", 0.0, RIG)
+    for leg in ("LH", "RH"):
+        assert end[f"IK_{leg}.y"] == pytest.approx(clips.REAR[f"IK_{leg}.y"])
+        assert start[f"IK_{leg}.y"] == pytest.approx(clips.REAR[f"IK_{leg}.y"])
+    assert close(sample("Rear_End", CLIPS["Rear_End"].length, RIG), sample("Rear_Start", 0.0, RIG))

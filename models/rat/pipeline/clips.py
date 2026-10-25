@@ -22,22 +22,28 @@ from names import LEGS
 FPS = 30
 
 PARAMS = {
+    # Every clip stands on bent legs: the whole body is lowered by `crouch` m (paws stay planted),
+    # which gives every IK leg room to reach; the bind pose has the forelegs nearly straight.
+    "Base": dict(crouch=0.008),
     "Idle": dict(length=4.0, breath_cycles=6, breath_amp=0.015, tail_cycles=2, tail_amp=0.12,
                  look_amp=0.1, ear_at=1.1, ear_amp=0.3, ear_follow_amp=0.08, blink_at=2.6),
     "Sniff": dict(length=4.0, look_up=-0.25, look_side=0.35, nose_cycles=24, nose_amp=0.08,
                   jaw_cycles=12, jaw_amp=0.04, breath_cycles=12, ear_amp=0.06),
     # Walk/Run play several gait cycles per clip so each stride fits the legs (see plan).
     "Walk": dict(gait=GaitParams(length=1.0, cycles=3, speed=0.25, duty=0.65, step_height=0.012,
-                                 phases={"LH": 0.0, "LF": 0.25, "RH": 0.5, "RF": 0.75}),
+                                 phases={"LH": 0.0, "LF": 0.25, "RH": 0.5, "RF": 0.75},
+                                 centres={"LF": 0.012, "RF": 0.012}),  # forelegs step mostly behind rest
                  bob=0.002, sway=0.04, tail_amp=0.15, ear_amp=0.1),
     "Run": dict(gait=GaitParams(length=0.4, cycles=2, speed=0.8, duty=0.3, step_height=0.02,
-                                phases={"LH": 0.0, "RH": 0.05, "LF": 0.5, "RF": 0.6}),
+                                phases={"LH": 0.0, "RH": 0.05, "LF": 0.5, "RF": 0.6},
+                                centres={"LF": 0.009, "RF": 0.009}),
                 flex=0.12, bob=0.004, pitch=0.08, tail_amp=0.1, ear_amp=0.15),
     "Jump_Start": dict(length=0.3, crouch_at=0.18),
     "Jump_Air": dict(length=0.5, paddle=0.004, tail_amp=0.05),
     "Jump_Land": dict(length=0.35, absorb_at=0.12),
-    "Turn": dict(length=0.6, angle=math.pi / 2, step_height=0.012, step_len=0.5,
-                 starts={"LF": 0.0, "RH": 0.15, "RF": 0.35, "LH": 0.5}, spine_lead=0.25, neck_lead=0.3),
+    # Overlapping steps: no paw is left planted while the body has turned far past it.
+    "Turn": dict(length=0.6, angle=math.pi / 2, step_height=0.012, step_len=0.6,
+                 starts={"LF": 0.0, "RH": 0.1, "RF": 0.2, "LH": 0.3}, spine_lead=0.25, neck_lead=0.3),
     "Rear_Start": dict(length=0.5),
     "Rear_Loop": dict(length=3.0, look_amp=0.3, nod_amp=0.1, nose_cycles=18, nose_amp=0.08,
                       breath_cycles=9),
@@ -146,16 +152,20 @@ def rotz_offset(p, angle):
 
 CROUCH = {"SKEL_Pelvis.z": -0.012, "SKEL_Spine1.rx": 0.08, "SKEL_Spine2.rx": 0.08, "SKEL_Neck0.rx": -0.1}
 PUSH = {"SKEL_Pelvis.z": 0.008, "SKEL_Pelvis.rx": -0.15, "IK_LH.y": 0.02, "IK_RH.y": 0.02,
-        "IK_LF.y": -0.01, "IK_RF.y": -0.01, "IK_LF.z": 0.015, "IK_RF.z": 0.015}
+        "IK_LF.y": -0.004, "IK_RF.y": -0.004, "IK_LF.z": 0.015, "IK_RF.z": 0.015}
 TUCK = {"IK_LH.y": 0.008, "IK_RH.y": 0.008, "IK_LH.z": 0.02, "IK_RH.z": 0.02,
         "IK_LF.y": -0.006, "IK_RF.y": -0.006, "IK_LF.z": 0.022, "IK_RF.z": 0.022,
         "SKEL_Tail0.rx": 0.1, "SKEL_Tail1.rx": 0.05}
 ABSORB = {"SKEL_Pelvis.z": -0.014, "SKEL_Spine1.rx": 0.08, "SKEL_Spine2.rx": 0.08, "SKEL_Neck0.rx": -0.12}
-REAR = {"SKEL_Pelvis.rx": -0.9, "SKEL_Pelvis.z": 0.01, **each(SPINE, "rx", -0.3),
+# REAR/SIT pitch the body up about the pelvis head, which lifts the hips; the pelvis drops to keep
+# the hips low and the hind paws step forward under it (planted there in Rear_Loop/Eat).
+REAR = {"SKEL_Pelvis.rx": -0.9, "SKEL_Pelvis.z": -0.01, **each(SPINE, "rx", -0.3),
+        "IK_LH.y": -0.008, "IK_RH.y": -0.008,
         "SKEL_Neck0.rx": 0.45, "SKEL_Head.rx": 0.35, "SKEL_Tail0.rx": 0.8,
         "IK_LF.fk": 1.0, "IK_RF.fk": 1.0,
         **both("SKEL_{}_UpperArm.rx", 0.5), **both("SKEL_{}_Forearm.rx", -1.0)}
-SIT = {"SKEL_Pelvis.rx": -0.6, "SKEL_Pelvis.z": 0.004, **each(SPINE, "rx", -0.2),
+SIT = {"SKEL_Pelvis.rx": -0.6, "SKEL_Pelvis.z": -0.004, **each(SPINE, "rx", -0.2),
+       "IK_LH.y": -0.006, "IK_RH.y": -0.006,
        "SKEL_Neck0.rx": 0.35, "SKEL_Head.rx": 0.45, "SKEL_Tail0.rx": 0.55,
        "IK_LF.fk": 1.0, "IK_RF.fk": 1.0,
        **both("SKEL_{}_UpperArm.rx", -0.6), **both("SKEL_{}_Forearm.rx", -1.2), **both("SKEL_{}_Hand.rx", -0.4)}
@@ -331,4 +341,5 @@ def times(clip):
 
 
 def sample(name, t, rig):
-    return CLIPS[name].fn(t, rig)
+    """The clip's pose at time t, standing in the Base crouch (SKEL_Pelvis.z lowered for every clip)."""
+    return add({"SKEL_Pelvis.z": -PARAMS["Base"]["crouch"]}, CLIPS[name].fn(t, rig))
