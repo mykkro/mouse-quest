@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rat viewer</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #1d2126; color: #e8e8e8; font: 13px system-ui, sans-serif; }
+  #ui { position: absolute; top: 8px; left: 8px; max-width: 320px; padding: 8px 10px; border-radius: 6px; background: #000a; }
+  #ui button { margin: 2px; padding: 3px 6px; }
+  #ui button.active { background: #4a8; color: #fff; }
+  #ui label { display: block; margin-top: 6px; }
+  #status { margin-top: 8px; opacity: 0.8; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="ui">
+  <div id="clips"></div>
+  <label>Crossfade <input id="fade" type="range" min="0" max="1" step="0.05" value="0.25"> <span id="fadeVal"></span> s</label>
+  <label>Playback speed <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1"> <span id="speedVal"></span>×</label>
+  <label><input id="skeleton" type="checkbox"> Skeleton</label>
+  <label><input id="wireframe" type="checkbox"> Wireframe</label>
+  <label><input id="move" type="checkbox"> Move at clip speed (check foot sliding)</label>
+  <div id="status"></div>
+</div>
+<script type="module">
+// Reference for game code:
+//  - Clips are in place. Move the rat yourself at gltf.scene.userData.clipSpeeds[clip] m/s
+//    along its local +Z (Walk 0.25, Run 0.8) so the feet don't slide.
+//  - One-shots play once and hold their last frame (LoopOnce + clampWhenFinished).
+//  - Turn_L/Turn_R end rotated ±90° relative to the root: when they finish, add the
+//    rotation to the object (rotation.y += ±PI/2) and switch to Idle with no crossfade.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const ONE_SHOTS = new Set(['Jump_Start', 'Jump_Land', 'Turn_L', 'Turn_R', 'Rear_Start', 'Rear_End', 'Death']);
+const TURNS = { Turn_L: Math.PI / 2, Turn_R: -Math.PI / 2 };
+const $ = (id) => document.getElementById(id);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1d2126);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 50);
+camera.position.set(0.45, 0.3, 0.55);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.05, 0);
+controls.update();
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(0.6, 1.2, 0.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.1, far: 3 });
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0x3a4048 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(4, 80, 0x66707a, 0x4a525a); // 5 cm cells
+grid.position.y = 0.0005;
+scene.add(grid);
+
+const gltf = await new GLTFLoader().loadAsync('../dist/rat.glb');
+const rat = gltf.scene;
+rat.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+scene.add(rat);
+const speeds = rat.userData.clipSpeeds ?? {};
+
+const skeleton = new THREE.SkeletonHelper(rat);
+skeleton.visible = false;
+scene.add(skeleton);
+
+const mixer = new THREE.AnimationMixer(rat);
+const actions = Object.fromEntries(gltf.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
+for (const [name, action] of Object.entries(actions)) {
+  if (ONE_SHOTS.has(name)) { action.setLoop(THREE.LoopOnce); action.clampWhenFinished = true; }
+}
+
+let current = null;
+function play(name, fade = Number($('fade').value)) {
+  const next = actions[name];
+  next.reset().setEffectiveWeight(1).play();
+  if (current && current !== next) {
+    if (fade > 0) current.crossFadeTo(next, fade, false); else current.stop();
+  }
+  current = next;
+  for (const b of $('clips').children) b.classList.toggle('active', b.textContent === name);
+  const speed = speeds[name];
+  $('status').textContent = `${name}${speed ? ` · ${speed} m/s` : ''} · ${gltf.animations.length} clips · ${skeleton.bones.length} joints`;
+}
+
+mixer.addEventListener('finished', (e) => {
+  const name = e.action.getClip().name;
+  if (name in TURNS) {
+    rat.rotation.y += TURNS[name];
+    play('Idle', 0);
+  }
+});
+
+for (const clip of gltf.animations) {
+  const b = document.createElement('button');
+  b.textContent = clip.name;
+  b.onclick = () => play(clip.name);
+  $('clips').appendChild(b);
+}
+
+const syncLabels = () => {
+  $('fadeVal').textContent = Number($('fade').value).toFixed(2);
+  $('speedVal').textContent = Number($('speed').value).toFixed(2);
+  mixer.timeScale = Number($('speed').value);
+};
+$('fade').oninput = $('speed').oninput = syncLabels;
+syncLabels();
+$('skeleton').onchange = (e) => { skeleton.visible = e.target.checked; };
+$('wireframe').onchange = (e) => rat.traverse((o) => { if (o.isMesh) o.material.wireframe = e.target.checked; });
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+const before = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  mixer.update(dt);
+  const name = current?.getClip().name;
+  if ($('move').checked && speeds[name]) {
+    before.copy(rat.position);
+    rat.translateZ(speeds[name] * dt * mixer.timeScale);
+    if (rat.position.length() > 1.5) rat.position.set(0, 0, 0);
+    const delta = rat.position.clone().sub(before);
+    camera.position.add(delta);
+    controls.target.add(delta);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+play('Idle');
+window.ratViewer = { play, actions, mixer, rat };
+</script>
+</body>
+</html>
