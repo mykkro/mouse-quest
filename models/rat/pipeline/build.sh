@@ -12,6 +12,7 @@ START="${1:-prep}"
 
 bl() { "$BLENDER" --factory-startup -b "$1" --python-exit-code 1 --python "$HERE/$2" -- "${@:3}"; }
 src_hash() { sha256sum "$RAT"/cgtrader/* | sha256sum; }
+[ -f "$RAT/cgtrader/Rat.blend" ] || { echo "PIPELINE ERROR: models/rat/cgtrader/Rat.blend missing (git-ignored source)" >&2; exit 1; }
 BEFORE="$(src_hash)"
 trap '[ "$(src_hash)" = "$BEFORE" ] || { echo "PIPELINE ERROR: files in cgtrader/ changed" >&2; exit 1; }' EXIT
 

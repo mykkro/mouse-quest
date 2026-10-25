@@ -169,6 +169,8 @@ SIT = {"SKEL_Pelvis.rx": -0.6, "SKEL_Pelvis.z": -0.004, **each(SPINE, "rx", -0.2
        "SKEL_Neck0.rx": 0.35, "SKEL_Head.rx": 0.45, "SKEL_Tail0.rx": 0.55,
        "IK_LF.fk": 1.0, "IK_RF.fk": 1.0,
        **both("SKEL_{}_UpperArm.rx", -0.6), **both("SKEL_{}_Forearm.rx", -1.2), **both("SKEL_{}_Hand.rx", -0.4)}
+# The stagger deliberately leans the opposite way to the final roll (ON_SIDE): mirroring it broke
+# IK reach at frame 9 of Death, and the rat ends on its right side.
 STAGGER = {"SKEL_Pelvis.ry": 0.2, "SKEL_Pelvis.rz": 0.15, "SKEL_Neck0.rx": 0.3,
            "IK_RF.y": -0.01, "IK_RF.z": 0.006}
 # Ry < 0 rolls the rat onto its right side (verified: left limbs end highest, right limbs on the ground).
