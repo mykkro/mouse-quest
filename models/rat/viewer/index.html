@@ -161,7 +161,7 @@ for (const clip of gltf.animations) {
 // moves the object at the clip's speed so planted feet don't slide. Backward walking plays
 // Walk reversed at half speed (and moves at half speed) for the same reason.
 const CTRL = { turnRate: 2.1, runTurnRate: 3.0, backScale: 0.5, turnInPlaceScale: 0.5,
-               jumpHeight: 0.08, airTime: 0.5, wrapRadius: 1.8, fade: 0.2 };
+               jumpHeight: 0.08, airTime: 0.5, landRecover: 0.12, wrapRadius: 1.8, fade: 0.2 };
 const GRAVITY = 8 * CTRL.jumpHeight / CTRL.airTime ** 2;  // parabola reaching jumpHeight
 const JUMP_VELOCITY = GRAVITY * CTRL.airTime / 2;           // and landing after airTime
 const KEYMAP = {
@@ -171,30 +171,58 @@ const KEYMAP = {
 };
 const MAPPED = new Set(Object.values(KEYMAP).flat());
 // States in which the keys may pick a new clip; all others wait for a clip to finish.
-const FREE = new Set(['idle', 'walk', 'run', 'back', 'turn', 'eat', 'sniff']);
+// 'recover' is a pass-through after a moving landing: the next frame crossfades from Jump_Land.
+const FREE = new Set(['idle', 'walk', 'run', 'back', 'turn', 'eat', 'sniff', 'recover']);
+// Jump states: the clip is fixed, but movement and turning keys keep steering the rat.
+const JUMPING = new Set(['jump_start', 'air', 'land']);
 const held = new Set();
 const isDown = (action) => KEYMAP[action].some((code) => held.has(code));
 let state = 'idle';
-let speed = 0;    // current forward speed, m/s (negative = backward)
-let airSpeed = 0; // forward speed carried through a jump
+let speed = 0;      // current forward speed, m/s (negative = backward)
 let vy = 0;
+let stateTime = 0;  // seconds spent in the current state
 
 function enter(next, clip, timeScale = 1, fade = CTRL.fade) {
+  if (next !== state) stateTime = 0;
   state = next;
   actions[clip].setEffectiveTimeScale(timeScale);
   if (current !== actions[clip]) play(clip, fade); // Walk/back/turn share a clip: only timeScale changes
 }
 
+// What the movement keys ask for right now; used on the ground and during jumps alike.
+function moveIntent() {
+  const fwd = isDown('forward') - isDown('back');
+  const turn = isDown('left') - isDown('right');
+  const running = fwd > 0 && isDown('run');
+  const v = fwd > 0 ? speeds[running ? 'Run' : 'Walk'] : fwd < 0 ? -speeds.Walk * CTRL.backScale : 0;
+  return { fwd, turn, running, speed: v };
+}
+
+function steer(m, dt) {
+  rat.rotation.y += m.turn * (m.running ? CTRL.runTurnRate : CTRL.turnRate) * dt;
+  speed = m.speed;
+  rat.translateZ(speed * dt);
+}
+
+function takeOff() {
+  vy = JUMP_VELOCITY;
+  enter('air', 'Jump_Air', 1, 0.1);
+}
+
 function onPress(code) {
   if (state === 'dead') { rat.position.y = 0; enter('idle', 'Idle', 1, 0.3); return; }
   if (!FREE.has(state)) return;
-  if (KEYMAP.jump.includes(code)) { airSpeed = speed; enter('jump_start', 'Jump_Start', 1, 0.1); }
+  if (KEYMAP.jump.includes(code)) {
+    // Standing jumps crouch first; a moving rat leaves the ground straight away.
+    if (moveIntent().speed !== 0) takeOff();
+    else enter('jump_start', 'Jump_Start', 1, 0.1);
+  }
   else if (KEYMAP.rear.includes(code)) enter('rear_start', 'Rear_Start');
   else if (KEYMAP.die.includes(code)) enter('dead', 'Death');
 }
 
 function onClipFinished(name) {
-  if (name === 'Jump_Start') { vy = JUMP_VELOCITY; enter('air', 'Jump_Air', 1, 0.1); }
+  if (name === 'Jump_Start') takeOff();
   else if (name === 'Jump_Land' || name === 'Rear_End') enter('idle', 'Idle');
   else if (name === 'Rear_Start') {
     if (isDown('rear')) enter('rear', 'Rear_Loop', 1, 0);
@@ -203,36 +231,29 @@ function onClipFinished(name) {
 }
 
 function updateController(dt) {
-  const turn = isDown('left') - isDown('right');
-  if (state === 'air') {
-    rat.rotation.y += turn * CTRL.turnRate * dt;
-    rat.translateZ(airSpeed * dt);
-    vy -= GRAVITY * dt;
-    rat.position.y += vy * dt;
-    if (rat.position.y <= 0) { rat.position.y = 0; vy = 0; enter('land', 'Jump_Land', 1, 0.1); }
+  stateTime += dt;
+  const m = moveIntent();
+  if (JUMPING.has(state)) {
+    steer(m, dt);
+    if (state === 'air') {
+      vy -= GRAVITY * dt;
+      rat.position.y += vy * dt;
+      if (rat.position.y <= 0) { rat.position.y = 0; vy = 0; enter('land', 'Jump_Land', 1, 0.1); }
+    } else if (state === 'land' && m.speed !== 0 && stateTime >= CTRL.landRecover) {
+      state = 'recover'; // locomotion below picks the clip on the next frame
+    }
     return;
   }
   if (state === 'rear' && !isDown('rear')) { enter('rear_end', 'Rear_End', 1, 0.15); return; }
   if (!FREE.has(state)) { speed = 0; return; }
 
-  const fwd = isDown('forward') - isDown('back');
-  const running = fwd > 0 && isDown('run');
-  if (fwd > 0) {
-    const clip = running ? 'Run' : 'Walk';
-    speed = speeds[clip];
-    enter(running ? 'run' : 'walk', clip);
-  } else if (fwd < 0) {
-    speed = -speeds.Walk * CTRL.backScale;
-    enter('back', 'Walk', -CTRL.backScale);
-  } else {
-    speed = 0;
-    if (turn) enter('turn', 'Walk', CTRL.turnInPlaceScale);
-    else if (isDown('eat')) enter('eat', 'Eat');
-    else if (isDown('sniff')) enter('sniff', 'Sniff');
-    else if (state !== 'idle') enter('idle', 'Idle');
-  }
-  rat.rotation.y += turn * (running ? CTRL.runTurnRate : CTRL.turnRate) * dt;
-  rat.translateZ(speed * dt);
+  if (m.fwd > 0) enter(m.running ? 'run' : 'walk', m.running ? 'Run' : 'Walk');
+  else if (m.fwd < 0) enter('back', 'Walk', -CTRL.backScale);
+  else if (m.turn) enter('turn', 'Walk', CTRL.turnInPlaceScale);
+  else if (isDown('eat')) enter('eat', 'Eat');
+  else if (isDown('sniff')) enter('sniff', 'Sniff');
+  else if (state !== 'idle') enter('idle', 'Idle');
+  steer(m, dt);
 }
 
 // Swing the camera round behind the rat while it is being driven (the mouse can still orbit).
