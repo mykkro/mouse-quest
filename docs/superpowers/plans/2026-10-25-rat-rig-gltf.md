@@ -40,7 +40,7 @@
 - The spec's "body/pelvis control" and "head look-at control" are FK channels on `SKEL_Pelvis` / `SKEL_Neck*` / `SKEL_Head` in the pose dicts, since every clip is generated procedurally; IK targets and pole targets are real control bones.
 - Eyeball and nose bones use their own centroid as pivot; eyelids pivot at their eyeball's centroid (the spec's joint-centroid rule would put eye pivots on the eye rim).
 - "Parameters for every clip in one dict at the top of the script" → `PARAMS` at the top of `clips.py`, which `03_anims.py` imports.
-- `build/rat.blend` is saved with the IK constraints muted so the baked actions play when opened; unmute them to polish through the control rig.
+- `build/rat.blend` is saved with the IK constraints muted so the baked actions play when opened; polish a clip by editing its deform-bone keys in FK with the IK constraints kept muted (set the action's `locked = True`); edits to IK/POLE control bones are not exported.
 
 ## File map
 

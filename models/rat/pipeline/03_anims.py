@@ -1,4 +1,9 @@
-"""Stage 3: control rig, sample every clip, bake to deform-bone actions, push to NLA."""
+"""Stage 3: control rig, sample every clip, bake to deform-bone actions, push to NLA.
+
+Hand-polish workflow (FK only): open build/rat.blend, keep the IK constraints muted, edit the
+deform-bone keys of that clip's action in FK, set the action's custom property `locked = True`
+and save. Edits to the IK/POLE control bones are not exported: check_anims requires keys on
+deform bones only, and 04_export strips the controls."""
 import math
 import os
 import sys
