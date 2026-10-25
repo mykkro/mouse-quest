@@ -1,0 +1,16 @@
+{
+  "name": "rat-asset-pipeline",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "viewer": "serve . -l 5173"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "4.5.1",
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "gltf-validator": "2.0.0-dev.3.10",
+    "serve": "14.2.4"
+  }
+}

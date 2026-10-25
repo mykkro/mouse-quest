@@ -38,4 +38,11 @@ if stage anims; then
   bl "$RAT/build/rat.blend" verify/render_clips.py
 fi
 
+if stage export; then
+  bl "$RAT/build/rat.blend" 04_export.py
+  bash "$HERE/optimize.sh"
+  "$PYTHON" "$HERE/write_expected.py" > "$RAT/build/expected.json"
+  (cd "$RAT" && node pipeline/verify/check_glb.mjs dist/rat.glb build/expected.json)
+fi
+
 echo "build.sh: OK"
