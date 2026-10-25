@@ -30,6 +30,8 @@ def apply_pose(arm, pose):
     reset(arm)
     chans = defaultdict(dict)
     for key, value in pose.items():
+        if "." not in key:
+            raise KeyError(f"pose key {key!r} must look like '<bone>.<channel>'")
         bone, ch = key.rsplit(".", 1)
         chans[bone][ch] = value
     for bone, ch in chans.items():
