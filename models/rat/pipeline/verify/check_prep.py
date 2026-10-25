@@ -29,6 +29,21 @@ def main():
     length = co[:, 1].max() - co[:, 1].min()
     check(0.40 < length < 0.55, f"rat length {length:.3f} m, expected ~0.47")
     check(all(not m.use_backface_culling for m in me.materials), "material must stay double-sided")
+    check(me.has_custom_normals, "custom (split) normals were lost")
+    me.calc_loop_triangles()
+    vol = 0.0
+    for t in me.loop_triangles:
+        v0, v1, v2 = (me.vertices[i].co for i in t.vertices)
+        vol += v0.dot(v1.cross(v2)) / 6
+    print(f"check_prep: signed volume {vol:.6f}")
+    check(vol > 0, f"faces wind inward (signed volume {vol:.6f})")
+    corner = me.corner_normals
+    agree = sum(1 for p in me.polygons for li in p.loop_indices if corner[li].vector.dot(p.normal) > 0)
+    frac = agree / len(me.loops)
+    print(f"check_prep: corner normals agreeing with face normals {frac:.4f}")
+    check(frac >= 0.95, f"only {frac:.1%} of corner normals agree with their face normal")
+    keys = [tuple(sorted(p.vertices)) for p in me.polygons]
+    check(len(set(keys)) == len(keys), f"{len(keys) - len(set(keys))} duplicate faces left")
     for img in bpy.data.images:
         check(os.path.exists(bpy.path.abspath(img.filepath)), f"image {img.name} path broken: {img.filepath}")
     print("check_prep: OK")

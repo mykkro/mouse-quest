@@ -98,6 +98,8 @@ def main():
     me = obj.data
     clean_attributes(me)
     n0 = len(me.vertices)
+    # The source stores every triangle twice with opposite winding (a baked back layer). The weld
+    # collapses each pair into one outward layer (6800 -> 3400 triangles); the material stays double-sided.
     merged = merge_coincident(me)
     print(f"01_prep: welded {merged} of {n0} vertices")
     check(merged <= MAX_MERGE_FRACTION * n0, f"weld removed {merged}/{n0} vertices; MERGE_DIST too loose?")
