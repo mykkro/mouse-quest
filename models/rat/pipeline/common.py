@@ -107,3 +107,41 @@ def require_groups(obj):
 def group_centroid(co, W, name):
     w = W[:, DEFORM_GROUPS.index(name)]
     return (co * w[:, None]).sum(0) / w.sum()
+
+
+# --- preview rendering -------------------------------------------------------
+
+VIEWS = {"side": (0.75, 0.0, 0.10), "q34": (0.5, -0.5, 0.3), "top": (0.0, 0.25, 0.9)}
+PREVIEW_TARGET = (0.0, 0.05, 0.05)
+
+
+def setup_preview(res=(480, 360)):
+    """Workbench scene with a ground plane and a camera aimed at the rat; returns the camera."""
+    scene = bpy.context.scene
+    scene.render.engine = "BLENDER_WORKBENCH"
+    scene.display.shading.light = "STUDIO"
+    scene.display.shading.color_type = "TEXTURE"
+    scene.render.resolution_x, scene.render.resolution_y = res
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    bpy.ops.mesh.primitive_plane_add(size=2.0, location=(0, 0, 0))
+    target = bpy.data.objects.new("PreviewTarget", None)
+    scene.collection.objects.link(target)
+    target.location = PREVIEW_TARGET
+    cam = bpy.data.objects.new("PreviewCam", bpy.data.cameras.new("PreviewCam"))
+    scene.collection.objects.link(cam)
+    cam.data.lens = 50
+    cam.data.clip_start = 0.01
+    track = cam.constraints.new("TRACK_TO")
+    track.target = target
+    track.track_axis = "TRACK_NEGATIVE_Z"
+    track.up_axis = "UP_Y"
+    scene.camera = cam
+    return cam
+
+
+def render_view(cam, view, path):
+    cam.location = VIEWS[view]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    bpy.context.scene.render.filepath = path
+    bpy.ops.render.render(write_still=True)

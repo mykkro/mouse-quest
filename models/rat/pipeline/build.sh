@@ -25,4 +25,10 @@ if stage prep; then
   bl "$RAT/build/01_prep.blend" verify/check_prep.py
 fi
 
+if stage skeleton; then
+  bl "$RAT/build/01_prep.blend" 02_skeleton.py
+  bl "$RAT/build/02_skeleton.blend" verify/check_skeleton.py
+  bl "$RAT/build/02_skeleton.blend" verify/render_poses.py
+fi
+
 echo "build.sh: OK"
