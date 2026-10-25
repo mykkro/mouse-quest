@@ -57,6 +57,7 @@ def wire_material(mesh, images):
     nt.links.new(rough_tex.outputs["Color"], split.inputs["Color"])
     nt.links.new(split.outputs["Green"], bsdf.inputs["Roughness"])
     bsdf.inputs["Metallic"].default_value = 0.0
+    bsdf.inputs["Specular IOR Level"].default_value = 0.5  # source has 0, which disables dielectric specular so the roughness map has no effect
     mat.use_backface_culling = False
 
 

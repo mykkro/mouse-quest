@@ -75,6 +75,8 @@ else {
   if (!m.getDoubleSided()) fail('material must be double-sided');
   if (!m.getBaseColorTexture() || !m.getNormalTexture() || !m.getMetallicRoughnessTexture()) fail('material needs base color, normal and metallic-roughness textures');
   if (m.getMetallicFactor() !== 0) fail(`metallicFactor ${m.getMetallicFactor()}, expected 0`);
+  const spec = m.getExtension('KHR_materials_specular');
+  if (spec && !(spec.getSpecularFactor() > 0)) fail(`KHR_materials_specular specularFactor ${spec.getSpecularFactor()}: specular disabled, roughness map has no effect`);
 }
 for (const tex of root.listTextures()) {
   if (tex.getMimeType() !== 'image/webp') fail(`texture ${tex.getName()} is ${tex.getMimeType()}, expected image/webp`);
