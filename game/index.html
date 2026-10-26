@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rat parkour</title>
+<title>Mouse Quest - The great escape</title>
 <style>
   body { margin: 0; overflow: hidden; background: #101418; color: #e8e8e8; font: 14px system-ui, sans-serif; }
   #hud { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); padding: 14px 22px;
@@ -11,6 +11,17 @@
   #help { position: absolute; bottom: 8px; left: 8px; padding: 6px 10px; border-radius: 6px; background: #0008;
           font-size: 12px; line-height: 1.6; }
   #help kbd { padding: 0 4px; border: 1px solid #fff5; border-radius: 3px; font: inherit; }
+  #menu { position:absolute; top:20px; left:22px; right:22px; display:flex; justify-content:space-between; gap:16px; align-items:start; }
+  .panel { background:#13211ee8; border:1px solid #7dafa044; border-radius:12px; padding:14px 18px; box-shadow:0 8px 30px #0003; }
+  .brand { font-size:11px; letter-spacing:.22em; color:#9bceb8; text-transform:uppercase; }
+  h1 { font-size:22px; margin:5px 0; font-weight:600; }
+  #description { margin:0; color:#b2c3bd; font-size:12px; max-width:380px; }
+  select, button { color:#edf9ef; background:#263d34; border:1px solid #779c86; padding:8px 10px; border-radius:6px; font:inherit; cursor:pointer; }
+  button:hover, select:hover { background:#3b5947; }
+  #navigation { display:flex; gap:8px; flex-wrap:wrap; max-width:380px; }
+  #hud { border:1px solid #a6d4b655; background:#13211ef0; font-size:18px; max-width:380px; line-height:1.7; }
+  #help { bottom:16px; left:22px; right:22px; width:fit-content; color:#d0ded6; background:#13211edc; }
+  @media(max-width:650px) { #menu { top:10px;left:10px;right:10px;flex-direction:column;gap:8px; } .panel { padding:10px; } h1 {font-size:18px;} #help {left:10px;right:10px;font-size:10px;} }
 </style>
 <script type="importmap">
 { "imports": {
@@ -20,11 +31,12 @@
 </script>
 </head>
 <body>
-<div id="hud" hidden></div>
-<div id="help">
-  <kbd>W</kbd>/<kbd>↑</kbd> walk · <kbd>Shift</kbd> run · <kbd>S</kbd>/<kbd>↓</kbd> back ·
-  <kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> turn · <kbd>Space</kbd> jump (hold = higher; while moving = leap)
+<div id="menu">
+  <div class="panel"><div class="brand">Mouse Quest / ten small adventures</div><h1 id="level-title"></h1><p id="description"></p></div>
+  <div class="panel" id="navigation"><select id="language" aria-label="Language / Jazyk"><option value="en">English</option><option value="cs">&#268;e&#353;tina</option></select><select id="levels" aria-label="Choose level"></select><button id="view" aria-pressed="false" title="Toggle camera (V)">Rat-eye view (V)</button><button id="retry">Restart</button><button id="next">Next level &rarr;</button></div>
 </div>
+<div id="hud" hidden role="status"></div><div id="surface-status" role="status" style="position:absolute;bottom:95px;left:22px;color:#ffe5a0;pointer-events:none"></div>
+<div id="help"><kbd>W</kbd> / &uarr; walk &middot; <kbd>Shift</kbd> run &middot; <kbd>S</kbd> / &darr; back &middot; <kbd>A</kbd><kbd>D</kbd> / &larr; &rarr; turn<br><kbd>Space</kbd> jump &mdash; hold for height, move to leap &middot; drag to look around &middot; <kbd>V</kbd> switch view</div>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -33,26 +45,34 @@ import { createClipPlayer } from '../models/rat/viewer/clip-player.js';
 import { createController, MAPPED } from '../models/rat/viewer/controller.js';
 import { swingBehind } from '../models/rat/viewer/camera.js';
 import { hasFallen, makeWorld, onGoal } from './collision.js';
-import { level } from './level.js';
+import { advancePlatforms, resetPlatforms } from './motion.js';
+import { messages, levelText, initialLanguage } from './i18n.js';
+import { levels } from './level.js';
+import { createMaterials, buildCourse } from './scenery.js';
+let motionTime = 0;
+let levelIndex = 0;
+let level = levels[0];
 
 const CAMERA_BACK = 0.75; // m behind the rat
 const CAMERA_UP = 0.4;    // m above it
 const TARGET_UP = 0.05;   // look at a point this high above the rat's feet
-const MESSAGES = {
-  ready: 'Reach the green pad — press any key to start',
-  fell: 'You fell! Press Space to restart',
-  won: 'You made it! Press Space to restart',
-};
+let savedLanguage;
+try { savedLanguage = localStorage.getItem('ratGame.language'); } catch {}
+let language = initialLanguage(navigator.language, savedLanguage);
+const t = key => messages[language][key];
+let surfaceEffect;
 const hud = document.getElementById('hud');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x101418);
+scene.background = new THREE.Color(0x182b2b);
+scene.fog = new THREE.FogExp2(0x182b2b, .065);
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 100);
 const controls = new OrbitControls(camera, renderer.domElement);
 
@@ -68,34 +88,61 @@ const floorGrid = new THREE.GridHelper(60, 240, 0x2a3440, 0x1c232b); // far floo
 floorGrid.position.y = -3;
 scene.add(floorGrid);
 
-const blockMat = new THREE.MeshStandardMaterial({ color: 0x5a6b80, roughness: 0.8 });
-const edgeMat = new THREE.LineBasicMaterial({ color: 0xa8bdd6 });
-for (const b of level.boxes) {
-  const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-  const mesh = new THREE.Mesh(geo, blockMat);
-  mesh.position.set(b.x, b.y + b.h / 2, b.z);
-  mesh.castShadow = mesh.receiveShadow = true;
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-  edges.position.copy(mesh.position);
-  scene.add(mesh, edges);
-}
-const { goal } = level;
-const pad = new THREE.Mesh(new THREE.BoxGeometry(goal.w, 0.004, goal.d),
-  new THREE.MeshStandardMaterial({ color: 0x33ff88, emissive: 0x22cc66, emissiveIntensity: 1.2 }));
-pad.position.set(goal.x, goal.top + 0.002, goal.z);
-scene.add(pad);
+const materials = createMaterials(renderer);
+let scenery = buildCourse(scene, level, materials);
+const selector = document.getElementById('levels');
+levels.forEach((entry, i) => selector.add(new Option(`${i+1}. ${entry.name}`, String(i))));
+let world = makeWorld(level.boxes, level.patches);
 
 const gltf = await new GLTFLoader().loadAsync('../models/rat/dist/rat.glb');
 const rat = gltf.scene;
 rat.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 scene.add(rat);
+// Use the midpoint of the animated eyes while keeping the horizon steady as the rat moves.
+const leftEye = rat.getObjectByName('FACIAL_L_Eyeball');
+const rightEye = rat.getObjectByName('FACIAL_R_Eyeball');
+const eyeLeft = new THREE.Vector3(), eyeRight = new THREE.Vector3();
+let firstPerson = false;
+const viewButton = document.getElementById('view');
+// The rat remains in shadow rendering, but cannot obscure its own eye camera.
+rat.traverse(o => { if (o.isMesh) o.layers.set(1); });
+camera.layers.enable(1);
+sun.shadow.camera.layers.enable(1);
+
+function updateEyeCamera() {
+  rat.updateMatrixWorld(true);
+  if (leftEye && rightEye) {
+    leftEye.getWorldPosition(eyeLeft);
+    rightEye.getWorldPosition(eyeRight);
+    camera.position.copy(eyeLeft).add(eyeRight).multiplyScalar(.5);
+  } else {
+    camera.position.set(0, .055, .07);
+    rat.localToWorld(camera.position);
+  }
+  const yaw = rat.rotation.y;
+  camera.lookAt(camera.position.x + Math.sin(yaw), camera.position.y - .08,
+    camera.position.z + Math.cos(yaw));
+}
+
+function toggleView() {
+  firstPerson = !firstPerson;
+  controls.enabled = !firstPerson;
+  camera.layers[firstPerson ? 'disable' : 'enable'](1);
+  camera.fov = firstPerson ? 80 : 50;
+  camera.near = firstPerson ? .003 : .01;
+  camera.updateProjectionMatrix();
+  viewButton.textContent = t(firstPerson ? 'chase' : 'eye');
+  viewButton.setAttribute('aria-pressed', String(firstPerson));
+  placeCamera();
+}
+viewButton.addEventListener('click', () => { toggleView(); viewButton.blur(); });
 const speeds = rat.userData.clipSpeeds ?? {};
 
 const mixer = new THREE.AnimationMixer(rat);
 const actions = Object.fromEntries(gltf.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
 const player = createClipPlayer(actions, { loopOnce: THREE.LoopOnce });
 const controller = createController({
-  rat, actions, speeds, play: player.play, current: () => player.current, world: makeWorld(level.boxes),
+  rat, actions, speeds, play: player.play, current: () => player.current, world: { step: world.step, groundHeight: (...args) => world.groundHeight(...args), move: (...args) => world.move(...args), canTurn: (...args) => world.canTurn(...args), surface: (...args) => world.surface(...args) },
 });
 mixer.addEventListener('finished', (e) => {
   if (e.action === player.current) controller.clipFinished(e.action.getClip().name);
@@ -104,11 +151,12 @@ mixer.addEventListener('finished', (e) => {
 let game = 'ready';
 function setGame(next) {
   game = next;
-  hud.textContent = MESSAGES[next] ?? '';
-  hud.hidden = !MESSAGES[next];
+  hud.textContent = next === 'won' && levelIndex === levels.length - 1 ? t('final') : messages[language][next] ?? '';
+  hud.hidden = !['ready','fell','won'].includes(next);
 }
 
 function placeCamera() {
+  if (firstPerson) { updateEyeCamera(); return; }
   const p = rat.position;
   controls.target.set(p.x, p.y + TARGET_UP, p.z);
   camera.position.set(p.x - Math.sin(rat.rotation.y) * CAMERA_BACK, p.y + CAMERA_UP,
@@ -120,21 +168,47 @@ function place(x, y, z, yaw) {
   rat.position.set(x, y, z);
   rat.rotation.y = yaw;
   controller.reset();
+  rat.rotation.x = rat.rotation.z = 0;
   placeCamera();
 }
 
+function loadLevel(index) {
+  levelIndex = (index + levels.length) % levels.length;
+  level = levels[levelIndex];
+  controller.releaseAll();
+  world = makeWorld(level.boxes, level.patches);
+  scenery.dispose();
+  scenery = buildCourse(scene, level, materials);
+  selector.value = String(levelIndex);
+  refreshLanguage();
+  restart();
+}
+selector.addEventListener('change', () => { loadLevel(Number(selector.value)); selector.blur(); });
+document.getElementById('retry').addEventListener('click', e => { restart(); e.currentTarget.blur(); });
+document.getElementById('next').addEventListener('click', e => { loadLevel(levelIndex+1); e.currentTarget.blur(); });
+
 function restart() {
+  controller.releaseAll();
+  motionTime = 0;
+  resetPlatforms(level);
+  scenery.sync();
   const { start } = level;
   place(start.x, start.top, start.z, start.yaw);
   setGame('ready');
 }
 
 addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLButtonElement) return;
+  if (e.code === 'KeyV') {
+    e.preventDefault();
+    if (!e.repeat) toggleView();
+    return;
+  }
   if (!MAPPED.has(e.code)) return;
   e.preventDefault(); // no page scrolling
   if (e.repeat) return;
   if (game === 'fell' || game === 'won') {
-    if (e.code === 'Space') restart(); // this press only restarts; it doesn't reach the rat
+    if (e.code === 'Space') { if (game === 'won') loadLevel(levelIndex + 1); else restart(); } // this press only restarts; it doesn't reach the rat
     return;
   }
   if (game === 'ready') setGame('playing');
@@ -152,16 +226,34 @@ const clock = new THREE.Clock();
 const before = new THREE.Vector3();
 const delta = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1); // no huge step after a background tab
+  const dt = Math.min(clock.getDelta(), 0.05); // no huge step after a background tab
   player.step(dt);
   mixer.update(dt);
   before.copy(rat.position);
-  controller.update(dt);
+  if (game === 'playing') {
+    advancePlatforms(level,motionTime+dt,rat,controller.state !== 'air');
+    motionTime += dt;
+    scenery.sync();
+    controller.update(dt);
+  }
+  const surface = controller.state === 'air' ? {} : world.surface(rat.position);
+  // YXZ keeps steering independent of pitch and roll.
+  rat.rotation.order = 'YXZ';
+  const pitch = -Math.atan((surface.slopeX ?? 0)*Math.sin(rat.rotation.y) + (surface.slopeZ ?? 0)*Math.cos(rat.rotation.y));
+  const roll = Math.atan((surface.slopeX ?? 0)*Math.cos(rat.rotation.y) - (surface.slopeZ ?? 0)*Math.sin(rat.rotation.y));
+  const tiltBlend = 1-Math.exp(-12*dt);
+  rat.rotation.x += (pitch-rat.rotation.x)*tiltBlend;
+  rat.rotation.z += (roll-rat.rotation.z)*tiltBlend;
+  surfaceEffect = surface.effect;
+  refreshSurfaceStatus();
+  scenery.ring.rotation.y += dt;
   if (game === 'playing') {
     if (hasFallen(rat.position, level)) { controller.releaseAll(); setGame('fell'); }
-    else if (onGoal(rat.position, goal)) { controller.releaseAll(); setGame('won'); }
+    else if (onGoal(rat.position, level.goal)) { controller.releaseAll(); setGame('won'); }
   }
-  if (game !== 'fell') { // when it falls, the camera stays put and watches it drop
+  if (firstPerson) {
+    updateEyeCamera();
+  } else if (game !== 'fell') { // when it falls, the camera stays put and watches it drop
     delta.subVectors(rat.position, before);
     delta.y = 0;
     camera.position.add(delta);
@@ -174,16 +266,51 @@ renderer.setAnimationLoop(() => {
   }
   sun.position.copy(rat.position).add(SUN_OFFSET); // keep the shadow camera on the rat
   sun.target.position.copy(rat.position);
-  controls.update();
+  if (!firstPerson) controls.update();
   renderer.render(scene, camera);
 });
 
-restart();
+function refreshSurfaceStatus() {
+  document.getElementById('surface-status').textContent = surfaceEffect === 'glue' || surfaceEffect === 'slip' ? t(surfaceEffect) : '';
+}
+function refreshLanguage() {
+  document.documentElement.lang = language;
+  document.title = t('title');
+  document.querySelector('.brand').textContent = t('brand');
+  document.getElementById('language').value = language;
+  document.getElementById('language').setAttribute('aria-label',t('language'));
+  selector.setAttribute('aria-label', t('chooseLevel'));
+  levels.forEach((entry,i) => { selector.options[i].textContent = `${i+1}. ${levelText(entry,language).name}`; });
+  const text = levelText(level,language);
+  document.getElementById('level-title').textContent = `${String(levelIndex+1).padStart(2,'0')} / ${text.name}`;
+  document.getElementById('description').textContent = text.description;
+  document.getElementById('retry').textContent = t('retry');
+  document.getElementById('next').textContent = t('next');
+  viewButton.textContent = t(firstPerson ? 'chase' : 'eye');
+  viewButton.title = t('camera');
+  document.getElementById('help').innerHTML = t('help');
+  refreshSurfaceStatus();
+  setGame(game);
+}
+document.getElementById('language').addEventListener('change', e => {
+  language = e.target.value;
+  try { localStorage.setItem('ratGame.language',language); } catch {}
+  refreshLanguage();
+  e.target.blur();
+});
+loadLevel(0);
 window.ratGame = {
   get state() { return game; },
   get ctrlState() { return controller.state; },
   get speed() { return controller.speed; },
-  rat, level,
+  rat, camera,
+  get view() { return firstPerson ? 'first-person' : 'chase'; },
+  get level() { return level; },
+  get levelIndex() { return levelIndex; },
+  get language() { return language; },
+  get motionTime() { return motionTime; },
+  get levelCount() { return levels.length; },
+  loadLevel,
   key(code, pressed) { // for scripted tests: same path as real key events
     dispatchEvent(new KeyboardEvent(pressed ? 'keydown' : 'keyup', { code }));
   },

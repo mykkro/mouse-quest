@@ -6,7 +6,9 @@ browser with [three.js](https://threejs.org/).
 
 ![The rat on a zig-zag beam, heading for the stairs](docs/images/game.png)
 
-This is a prototype: one hand-built level, made to find out whether rat parkour is fun.
+Ten courses: the original scramble, a branching pipe labyrinth, rooftops, pantry shelves, spillway grates, the escape, a three-lap Corkscrew Tower, the four-storey Tangled Skyworks, the Abyssal Labyrinth, and the Clockwork Crossing. Level 10 introduces shuttles, an elevator and a rotating turntable: cyan stripes mark moving platforms, which carry you while grounded. Restart resets their timing. Level 9 has four branching maze decks, switchback ramps, dead ends, crate hurdles, broken bridges and open void shafts; there is no safety floor. Surfaces use procedural concrete, metal, brick, wood, and grate textures. Choose any course from the level selector, or reach its green beacon and press Space to advance. The Restart button retries the current course. Rooftop and pantry routes include inclined walkways. Amber striped glue slows movement and shortens moving leaps; blue striped wet patches retain momentum, so brake early. The two tower levels have overlapping routes, numbered landings, catch floors and return ramps; falling can cost height without ending your run. Patches affect the rat only while its feet touch them.
+
+Choose English or Čeština in the language menu. Czech localization uses the title **Příběh krysy** and translates all ten levels, controls and game messages. Your choice is remembered; Czech browser language selects Czech on the first visit.
 
 ## Play
 
@@ -23,6 +25,7 @@ Once GitHub Pages is enabled (see [Deploy](#deploy-to-github-pages)), the game i
 | Space | jump: hold for higher; while moving it's a leap (running leaps go about 1 m) |
 | E / R / F | eat / rear up / sniff (hold) |
 | X | play dead |
+| V | toggle chase / rat-eye first-person camera |
 
 Tips:
 - Tap Space for a short hop.

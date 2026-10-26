@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(import.meta.dirname, '..');
 
 export const SITE_FILES = [
-  'game/index.html', 'game/collision.js', 'game/level.js',
+  'game/i18n.js', 'game/index.html', 'game/collision.js', 'game/level.js', 'game/scenery.js', 'game/motion.js',
   'models/rat/viewer/index.html', 'models/rat/viewer/clip-player.js',
   'models/rat/viewer/controller.js', 'models/rat/viewer/camera.js',
   'models/rat/dist/rat.glb',

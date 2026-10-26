@@ -32,6 +32,7 @@ export function createController({ rat, actions, speeds, play, current, world = 
   let speed = 0;       // current forward speed, m/s (negative = backward)
   let airSpeed = 0;    // forward speed locked in at take-off (momentum through the air)
   let vy = 0;
+  let driftX = 0, driftZ = 0;
   let jumpCut = false; // upward speed already cut because Space was released
   let stateTime = 0;   // seconds spent in the current state
 
@@ -52,20 +53,55 @@ export function createController({ rat, actions, speeds, play, current, world = 
   }
 
   // Move d metres along the facing through the world; false if a wall stopped the move.
-  function moveForward(d) {
-    if (d === 0) return true;
+  function moveDisplacement(dx, dz) {
     const p = rat.position;
-    const to = { x: p.x + Math.sin(rat.rotation.y) * d, z: p.z + Math.cos(rat.rotation.y) * d };
-    const r = world.move({ x: p.x, z: p.z }, to, p.y);
-    p.x = r.x;
-    p.z = r.z;
-    return r.x === to.x && r.z === to.z;
+    const count = Math.max(1, Math.ceil(Math.hypot(dx,dz)/.008));
+    let clear = true;
+    for (let i=0;i<count;i++) {
+      const to = {x:p.x+dx/count,z:p.z+dz/count};
+      const r = world.move({x:p.x,z:p.z},to,p.y,rat.rotation.y);
+      if (r.x !== to.x) { driftX = 0; clear = false; }
+      if (r.z !== to.z) { driftZ = 0; clear = false; }
+      p.x = r.x; p.z = r.z;
+      if (state !== 'air') {
+        const g = world.groundHeight(p.x,p.z,p.y);
+        if (Math.abs(g-p.y) <= world.step) p.y = g;
+      }
+    }
+    return clear;
+  }
+
+  function moveForward(d) {
+    return moveDisplacement(Math.sin(rat.rotation.y)*d, Math.cos(rat.rotation.y)*d);
+  }
+
+  function turn(angle) {
+    // Sample the sweep so a quick turn cannot put the nose through a wall.
+    const count = Math.max(1,Math.ceil(Math.abs(angle)/.05));
+    for(let i=0;i<count;i++) {
+      const next = rat.rotation.y + angle/count;
+      if (world.canTurn && !world.canTurn(rat.position,rat.rotation.y,next)) break;
+      rat.rotation.y = next;
+    }
   }
 
   function steer(m, dt) {
-    rat.rotation.y += m.turn * (m.running ? CTRL.runTurnRate : CTRL.turnRate) * dt;
-    speed = m.speed;
-    moveForward(speed * dt);
+    turn(m.turn * (m.running ? CTRL.runTurnRate : CTRL.turnRate) * dt);
+    const surface = world.surface?.(rat.position) ?? {};
+    const scale = surface.effect === 'glue' ? .35 : 1;
+    const targetX = Math.sin(rat.rotation.y)*m.speed*scale;
+    const targetZ = Math.cos(rat.rotation.y)*m.speed*scale;
+    if (surface.effect === 'slip') {
+      // Low grip: steering and braking take several times longer than dry ground.
+      const blend = 1-Math.exp(-.55*dt);
+      driftX += (targetX-driftX)*blend;
+      driftZ += (targetZ-driftZ)*blend;
+      driftX -= (surface.slopeX ?? 0)*1.2*dt;
+      driftZ -= (surface.slopeZ ?? 0)*1.2*dt;
+    } else { driftX = targetX; driftZ = targetZ; }
+    speed = Math.hypot(driftX,driftZ) * (m.fwd < 0 ? -1 : 1);
+    moveDisplacement(driftX*dt,driftZ*dt);
+    if (surface.effect === 'glue' && current()) current().setEffectiveTimeScale(m.fwd < 0 ? -CTRL.backScale*scale : scale);
   }
 
   // On the ground: follow small steps, or start falling if the ground dropped away.
@@ -89,6 +125,8 @@ export function createController({ rat, actions, speeds, play, current, world = 
       vy = launchSpeed(CTRL.jumpHeight);
       airSpeed = m.speed;
     }
+    if (world.surface?.(rat.position)?.effect === 'glue') airSpeed *= .65;
+    driftX = driftZ = 0;
     jumpCut = false;
     enter('air', 'Jump_Air', 1, 0.1);
   }
@@ -116,9 +154,14 @@ export function createController({ rat, actions, speeds, play, current, world = 
 
   function updateAir(m, dt) {
     // Momentum carries the rat; the keys can only turn it. A wall stops the forward motion.
-    rat.rotation.y += m.turn * CTRL.turnRate * dt;
+    turn(m.turn * CTRL.turnRate * dt);
     speed = airSpeed;
-    if (!moveForward(speed * dt)) airSpeed = speed = 0;
+    if (!moveForward(speed * dt)) {
+      speed = 0;
+      // A rising nose may brush a stair before clearing it; keep the leap intent
+      // until the apex so that contact does not cancel the whole jump.
+      if (vy <= 0) airSpeed = 0;
+    }
     // Hold Space for the full jump; let go early (or just tap it) for a lower, shorter hop.
     if (!jumpCut && vy > 0 && !isDown('jump')) { vy *= CTRL.jumpCut; jumpCut = true; }
     const p = rat.position;
@@ -129,7 +172,7 @@ export function createController({ rat, actions, speeds, play, current, world = 
     if (vy <= 0 && p.y <= g) { p.y = g; vy = 0; enter('land', 'Jump_Land', 1, 0.1); }
   }
 
-  function update(dt) {
+  function stepUpdate(dt) {
     stateTime += dt;
     const m = moveIntent();
     if (state === 'air') { updateAir(m, dt); return; }
@@ -154,10 +197,16 @@ export function createController({ rat, actions, speeds, play, current, world = 
     settle();
   }
 
+  function update(dt) {
+    const count = Math.max(1, Math.ceil(dt / (1/120)));
+    for (let i=0;i<count;i++) stepUpdate(dt/count);
+  }
+
   // Back to a calm idle on the spot (the caller places the rat first).
   function reset() {
     held.clear();
     speed = airSpeed = vy = 0;
+    driftX = driftZ = 0;
     jumpCut = false;
     state = 'reset';
     enter('idle', 'Idle', 1, 0);

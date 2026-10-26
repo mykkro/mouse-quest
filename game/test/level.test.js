@@ -45,3 +45,34 @@ test('the course has the agreed obstacles', () => {
   assert.ok(boxes.some((b) => Math.min(b.w, b.d) === 0.035), 'a 3.5 cm balance beam');
   assert.ok(boxes.filter((b) => Math.min(b.w, b.d) === 0.06).length === 3, 'three 6 cm zig-zag beams');
 });
+
+// Validate the playable route separately from decorative/dead-end branches.
+import { levels } from '../level.js';
+for (const course of levels) {
+  test(`${course.id}: spawn, beacon and route are reachable`, () => {
+    assert.equal(groundHeight(course.boxes, course.start.x, course.start.z, course.start.top), course.start.top);
+    assert.ok(Math.abs(groundHeight(course.boxes, course.goal.x, course.goal.z, course.goal.top) - course.goal.top) < 1e-9);
+    const route = course.route;
+    for (let i = 1; i < route.length; i++) {
+      assert.ok(gapBetween(route[i-1], route[i]) <= MAX_GAP, `unreachable gap at ${i}`);
+      assert.ok(top(route[i]) - top(route[i-1]) - Math.max(0,route[i-1].motion?.dy ?? 0) <= MAX_RISE, `unreachable rise at ${i}`);
+    }
+    assert.ok(course.killY < Math.min(...route.map(top)));
+  });
+}
+
+test('labyrinth has four connected branching decks, many dead ends and no floor under its void shaft', () => {
+  const l=levels[8];
+  assert.equal(l.maze.decks.length,4);
+  assert.ok(l.maze.deadEnds.length>=12);
+  assert.ok(l.maze.obstacles.length>=8);
+  assert.ok(l.maze.bridges.length>=8);
+  for(const deck of l.maze.decks) {
+    const nodes=new Map(deck.nodes.map(n=>[n.id,n]));
+    const seen=new Set([deck.entrance]),queue=[deck.entrance];
+    for(let i=0;i<queue.length;i++)for(const id of nodes.get(queue[i]).neighbors)if(!seen.has(id)){seen.add(id);queue.push(id);}
+    assert.equal(seen.size,24,'every branch joins its deck');
+    assert.ok(deck.path.length>=8,'exit requires a winding route');
+  }
+  assert.equal(groundHeight(l.boxes,0,0,10),-Infinity,'open shaft extends through every deck');
+});
