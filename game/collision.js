@@ -8,10 +8,9 @@ export const top = (b) => b.y + b.h;
 
 const inside = (b, x, z) => Math.abs(x - b.x) <= b.w / 2 && Math.abs(z - b.z) <= b.d / 2;
 
-function hitsCircle(b, x, z, r) {
-  const dx = Math.max(Math.abs(x - b.x) - b.w / 2, 0);
-  const dz = Math.max(Math.abs(z - b.z) - b.d / 2, 0);
-  return dx * dx + dz * dz < r * r;
+// Distance from the point to the box's top-down rectangle (0 inside it).
+function gap(b, x, z) {
+  return Math.hypot(Math.max(Math.abs(x - b.x) - b.w / 2, 0), Math.max(Math.abs(z - b.z) - b.d / 2, 0));
 }
 
 const isWall = (b, footY) => top(b) > footY + STEP && b.y < footY + RAT_HEIGHT;
@@ -27,11 +26,12 @@ export function groundHeight(boxes, x, z, footY) {
   return best;
 }
 
-// A wall blocks a move only if the rat's circle would newly overlap it, so a rat that is
-// already touching one can always move away. Resolved per axis, so it slides along walls.
+// A wall blocks any move that would bring the rat's circle closer into it. A rat already
+// touching one (e.g. it began to overlap a block while still above its top, then dropped
+// below it) can move away or along it but never deeper. Resolved per axis, so it slides.
 export function moveWithWalls(boxes, from, to, footY) {
   const blocked = (x0, z0, x1, z1) => boxes.some((b) =>
-    isWall(b, footY) && hitsCircle(b, x1, z1, RAT_RADIUS) && !hitsCircle(b, x0, z0, RAT_RADIUS));
+    isWall(b, footY) && gap(b, x1, z1) < RAT_RADIUS && gap(b, x1, z1) < gap(b, x0, z0));
   const x = blocked(from.x, from.z, to.x, from.z) ? from.x : to.x;
   const z = blocked(x, from.z, x, to.z) ? from.z : to.z;
   return { x, z };

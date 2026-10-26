@@ -64,6 +64,11 @@ test('moveWithWalls: a rat already touching a wall can move away from it', () =>
   assert.deepEqual(moveWithWalls([floor, wall], inside, { x: 0, z: 0.2 }, 0), { x: 0, z: 0.2 });
 });
 
+test('moveWithWalls: a rat already touching a wall cannot push deeper into it', () => {
+  const inside = { x: 0, z: 0.275 - RAT_RADIUS / 2 };
+  assert.deepEqual(moveWithWalls([floor, wall], inside, { x: 0, z: 0.27 }, 0), inside);
+});
+
 test('moveWithWalls: standing at the wall top height, it is ground, not a wall', () => {
   assert.deepEqual(moveWithWalls([floor, wall], { x: 0, z: 0.2 }, { x: 0, z: 0.3 }, 0.2), { x: 0, z: 0.3 });
 });

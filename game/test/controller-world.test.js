@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeWorld, RAT_RADIUS, top } from '../collision.js';
+import { level } from '../level.js';
 import { makeRig } from '../../models/rat/viewer/test/rig.js';
 
 const near = (actual, expected, tol, msg) =>
@@ -56,6 +57,18 @@ test('at a 0.1 s frame step a leap still lands on the step (no tunnelling)', () 
   c.press('KeyW'); run(0.4, 0.1); c.press('Space');
   until(() => c.state === 'land', 2, 0.1);
   assert.equal(rat.position.y, 0.1);
+});
+
+test('a leap that falls just short of a stair drops back in front of it, not through it', () => {
+  const { rat, c, until } = makeRig(makeWorld(level.boxes));
+  Object.assign(rat.position, { x: 1.29, y: 0, z: 2.95 }); // zig-zag beam 3, facing the stairs
+  rat.rotation.y = Math.PI / 2;
+  c.press('KeyW'); c.press('Space');
+  let lowest = 0;
+  until(() => { lowest = Math.min(lowest, rat.position.y); return c.state === 'land' || rat.position.y < level.killY; }, 3);
+  assert.ok(lowest >= level.killY, `sank to y ${lowest}`);
+  assert.equal(c.state, 'land');
+  assert.equal(rat.position.y, 0, 'back on pad 4');
 });
 
 test('reset after falling leaves the rat standing still where it is placed', () => {
