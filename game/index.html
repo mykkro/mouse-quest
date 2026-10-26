@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rat parkour</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #101418; color: #e8e8e8; font: 14px system-ui, sans-serif; }
+  #hud { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); padding: 14px 22px;
+         border-radius: 8px; background: #000b; font-size: 20px; text-align: center; pointer-events: none; }
+  #help { position: absolute; bottom: 8px; left: 8px; padding: 6px 10px; border-radius: 6px; background: #0008;
+          font-size: 12px; line-height: 1.6; }
+  #help kbd { padding: 0 4px; border: 1px solid #fff5; border-radius: 3px; font: inherit; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud" hidden></div>
+<div id="help">
+  <kbd>W</kbd>/<kbd>↑</kbd> walk · <kbd>Shift</kbd> run · <kbd>S</kbd>/<kbd>↓</kbd> back ·
+  <kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> turn · <kbd>Space</kbd> jump (hold = higher; while moving = leap)
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createClipPlayer } from '../models/rat/viewer/clip-player.js';
+import { createController, MAPPED } from '../models/rat/viewer/controller.js';
+import { swingBehind } from '../models/rat/viewer/camera.js';
+import { hasFallen, makeWorld, onGoal } from './collision.js';
+import { level } from './level.js';
+
+const CAMERA_BACK = 0.75; // m behind the rat
+const CAMERA_UP = 0.4;    // m above it
+const TARGET_UP = 0.05;   // look at a point this high above the rat's feet
+const MESSAGES = {
+  ready: 'Reach the green pad — press any key to start',
+  fell: 'You fell! Press Space to restart',
+  won: 'You made it! Press Space to restart',
+};
+const hud = document.getElementById('hud');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x101418);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+const SUN_OFFSET = new THREE.Vector3(0.8, 1.5, 0.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -1, right: 1, top: 1, bottom: -1, near: 0.1, far: 4 });
+scene.add(sun, sun.target);
+
+const floorGrid = new THREE.GridHelper(60, 240, 0x2a3440, 0x1c232b); // far floor for depth
+floorGrid.position.y = -3;
+scene.add(floorGrid);
+
+const blockMat = new THREE.MeshStandardMaterial({ color: 0x5a6b80, roughness: 0.8 });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0xa8bdd6 });
+for (const b of level.boxes) {
+  const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+  const mesh = new THREE.Mesh(geo, blockMat);
+  mesh.position.set(b.x, b.y + b.h / 2, b.z);
+  mesh.castShadow = mesh.receiveShadow = true;
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+  edges.position.copy(mesh.position);
+  scene.add(mesh, edges);
+}
+const { goal } = level;
+const pad = new THREE.Mesh(new THREE.BoxGeometry(goal.w, 0.004, goal.d),
+  new THREE.MeshStandardMaterial({ color: 0x33ff88, emissive: 0x22cc66, emissiveIntensity: 1.2 }));
+pad.position.set(goal.x, goal.top + 0.002, goal.z);
+scene.add(pad);
+
+const gltf = await new GLTFLoader().loadAsync('../models/rat/dist/rat.glb');
+const rat = gltf.scene;
+rat.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+scene.add(rat);
+const speeds = rat.userData.clipSpeeds ?? {};
+
+const mixer = new THREE.AnimationMixer(rat);
+const actions = Object.fromEntries(gltf.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
+const player = createClipPlayer(actions, { loopOnce: THREE.LoopOnce });
+const controller = createController({
+  rat, actions, speeds, play: player.play, current: () => player.current, world: makeWorld(level.boxes),
+});
+mixer.addEventListener('finished', (e) => {
+  if (e.action === player.current) controller.clipFinished(e.action.getClip().name);
+});
+
+let game = 'ready';
+function setGame(next) {
+  game = next;
+  hud.textContent = MESSAGES[next] ?? '';
+  hud.hidden = !MESSAGES[next];
+}
+
+function placeCamera() {
+  const p = rat.position;
+  controls.target.set(p.x, p.y + TARGET_UP, p.z);
+  camera.position.set(p.x - Math.sin(rat.rotation.y) * CAMERA_BACK, p.y + CAMERA_UP,
+    p.z - Math.cos(rat.rotation.y) * CAMERA_BACK);
+  controls.update();
+}
+
+function place(x, y, z, yaw) {
+  rat.position.set(x, y, z);
+  rat.rotation.y = yaw;
+  controller.reset();
+  placeCamera();
+}
+
+function restart() {
+  const { start } = level;
+  place(start.x, start.top, start.z, start.yaw);
+  setGame('ready');
+}
+
+addEventListener('keydown', (e) => {
+  if (!MAPPED.has(e.code)) return;
+  e.preventDefault(); // no page scrolling
+  if (e.repeat) return;
+  if (game === 'fell' || game === 'won') {
+    if (e.code === 'Space') restart(); // this press only restarts; it doesn't reach the rat
+    return;
+  }
+  if (game === 'ready') setGame('playing');
+  controller.press(e.code);
+});
+addEventListener('keyup', (e) => controller.release(e.code));
+addEventListener('blur', () => controller.releaseAll());
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+const before = new THREE.Vector3();
+const delta = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.1); // no huge step after a background tab
+  player.step(dt);
+  mixer.update(dt);
+  before.copy(rat.position);
+  controller.update(dt);
+  if (game === 'playing') {
+    if (hasFallen(rat.position, level)) { controller.releaseAll(); setGame('fell'); }
+    else if (onGoal(rat.position, goal)) { controller.releaseAll(); setGame('won'); }
+  }
+  if (game !== 'fell') { // when it falls, the camera stays put and watches it drop
+    delta.subVectors(rat.position, before);
+    delta.y = 0;
+    camera.position.add(delta);
+    controls.target.add(delta);
+    // Ease the height so jumps and drops don't jerk the view.
+    const dy = (rat.position.y + TARGET_UP - controls.target.y) * (1 - Math.exp(-4 * dt));
+    controls.target.y += dy;
+    camera.position.y += dy;
+    if (controller.speed !== 0) swingBehind(camera, controls.target, rat.rotation.y, dt);
+  }
+  sun.position.copy(rat.position).add(SUN_OFFSET); // keep the shadow camera on the rat
+  sun.target.position.copy(rat.position);
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+restart();
+window.ratGame = {
+  get state() { return game; },
+  get ctrlState() { return controller.state; },
+  get speed() { return controller.speed; },
+  rat, level,
+  key(code, pressed) { // for scripted tests: same path as real key events
+    dispatchEvent(new KeyboardEvent(pressed ? 'keydown' : 'keyup', { code }));
+  },
+  teleport: place,
+};
+</script>
+</body>
+</html>
