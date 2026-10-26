@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test \"game/test/*.test.js\" \"models/rat/viewer/test/*.test.js\"",
+    "test": "node --test \"game/test/*.test.js\" \"models/rat/viewer/test/*.test.js\" \"tools/test/*.test.js\"",
     "game": "serve . -l 5180",
+    "build:site": "node tools/build-site.mjs",
+    "preview:site": "npm run build:site && serve dist -l 5181",
     "check:viewer": "node tools/headless/viewer-check.mjs",
     "check:game": "node tools/headless/game-check.mjs"
   },
