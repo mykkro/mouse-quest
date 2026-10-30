@@ -169,7 +169,18 @@ export function createController({ rat, actions, speeds, play, current, world = 
     p.y += vy * dt - 0.5 * GRAVITY * dt * dt; // exact parabola step: same arc at any frame rate
     vy -= GRAVITY * dt;
     const g = world.groundHeight(p.x, p.z, Math.max(y0, p.y)); // surfaces passed this step count
-    if (vy <= 0 && p.y <= g) { p.y = g; vy = 0; enter('land', 'Jump_Land', 1, 0.1); }
+    if (vy <= 0 && p.y <= g) {
+      p.y = g; vy = 0;
+      if (world.surface?.(p)?.effect === 'slip') {
+        // Transfer the actual landing velocity into a boosted slide, even after
+        // the player releases movement. Apply once per landing, never per frame.
+        const landingSpeed = Math.max(-3.2, Math.min(3.2, speed * 1.25));
+        driftX = Math.sin(rat.rotation.y) * landingSpeed;
+        driftZ = Math.cos(rat.rotation.y) * landingSpeed;
+        speed = landingSpeed;
+      }
+      enter('land', 'Jump_Land', 1, 0.1);
+    }
   }
 
   function stepUpdate(dt) {

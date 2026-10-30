@@ -4,7 +4,15 @@ Guide a rigged, animated rat along narrow beams, across gaps and up stairs to th
 green goal pad. If you fall, you start again from the beginning. It runs in the
 browser with [three.js](https://threejs.org/).
 
-![The rat on a zig-zag beam, heading for the stairs](docs/images/game.png)
+Courses float above sky, green-lit depths, or fiery voids; Midnight Pantry has a
+starry night sky and a cratered moon. Weathered platforms have subtle bevels and
+surface relief. Amber glue appears as glossy, bubbly puddles; ice has frosted rims
+and branching cracks. Ice is spread across more landing pads, with dry margins.
+Landing on ice transfers horizontal jump velocity into a slide with a one-time
+25% speed boost (capped at 3.2 m/s); friction then slows it, even after releasing
+movement. A stationary jump stays stationary. Glue still slows walking and leaps.
+
+![The rat crossing amber glue and frosted shelves in the moonlit Midnight Pantry](docs/images/game.png)
 
 Ten courses: the original scramble, a branching pipe labyrinth, rooftops, pantry shelves, spillway grates, the escape, a three-lap Corkscrew Tower, the four-storey Tangled Skyworks, the Abyssal Labyrinth, and the Clockwork Crossing. Level 10 introduces shuttles, an elevator and a rotating turntable: cyan stripes mark moving platforms, which carry you while grounded. Restart resets their timing. Level 9 has four branching maze decks, switchback ramps, dead ends, crate hurdles, broken bridges and open void shafts; there is no safety floor. Surfaces use procedural concrete, metal, brick, wood, and grate textures. Choose any course from the level selector, or reach its green beacon and press Space to advance. The Restart button retries the current course. Rooftop and pantry routes include inclined walkways. Amber striped glue slows movement and shortens moving leaps; blue striped wet patches retain momentum, so brake early. The two tower levels have overlapping routes, numbered landings, catch floors and return ramps; falling can cost height without ending your run. Patches affect the rat only while its feet touch them.
 

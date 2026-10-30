@@ -48,7 +48,7 @@ import { hasFallen, makeWorld, onGoal } from './collision.js';
 import { advancePlatforms, resetPlatforms } from './motion.js';
 import { messages, levelText, initialLanguage } from './i18n.js';
 import { levels } from './level.js';
-import { createMaterials, buildCourse } from './scenery.js';
+import { createMaterials, buildCourse, createVoid } from './scenery.js';
 let motionTime = 0;
 let levelIndex = 0;
 let level = levels[0];
@@ -84,9 +84,7 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -1, right: 1, top: 1, bottom: -1, near: 0.1, far: 4 });
 scene.add(sun, sun.target);
 
-const floorGrid = new THREE.GridHelper(60, 240, 0x2a3440, 0x1c232b); // far floor for depth
-floorGrid.position.y = -3;
-scene.add(floorGrid);
+const voidBackground = createVoid(scene);
 
 const materials = createMaterials(renderer);
 let scenery = buildCourse(scene, level, materials);
@@ -175,6 +173,7 @@ function place(x, y, z, yaw) {
 function loadLevel(index) {
   levelIndex = (index + levels.length) % levels.length;
   level = levels[levelIndex];
+  voidBackground.setLevel(level);
   controller.releaseAll();
   world = makeWorld(level.boxes, level.patches);
   scenery.dispose();
@@ -267,6 +266,7 @@ renderer.setAnimationLoop(() => {
   sun.position.copy(rat.position).add(SUN_OFFSET); // keep the shadow camera on the rat
   sun.target.position.copy(rat.position);
   if (!firstPerson) controls.update();
+  voidBackground.update(camera, dt);
   renderer.render(scene, camera);
 });
 

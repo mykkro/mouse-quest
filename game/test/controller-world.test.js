@@ -129,6 +129,37 @@ test('slippery ground retains momentum after release and then slows', () => {
   assert.equal(rat.position.z,stopped,'restart clears drift');
 });
 
+for (const dt of [1/120,1/30]) {
+  test(`landing on ice boosts leap momentum once and coasts without input (dt ${dt})`, () => {
+    const {rat,c,step:run,until}=makeRig(makeWorld([{...floor,w:20,d:20,effect:'slip'}]));
+    rat.rotation.y=Math.PI/4;
+    c.press('KeyW');c.press('Space');
+    run(.1,dt);c.release('KeyW');
+    until(()=>c.state==='land',2,dt);
+    assert.ok(c.speed>1.4 && c.speed<=1.5,'1.2 m/s leap gains a single 25% landing boost');
+    const x=rat.position.x,z=rat.position.z,landingSpeed=c.speed;
+    c.releaseAll();run(.2,dt);
+    assert.ok(rat.position.x-x>.17 && rat.position.z-z>.17,'coasts along the diagonal landing direction');
+    assert.ok(c.speed<landingSpeed && c.speed>1.2,'friction decays boost rather than multiplying it each frame');
+    c.reset();const stopped=rat.position.z;run(.2,dt);
+    assert.equal(rat.position.z,stopped,'reset clears the landing slide');
+  });
+}
+
+test('standing jump onto ice creates no horizontal velocity', () => {
+  const {rat,c,until,step:run}=makeRig(makeWorld([{...floor,w:5,d:20,effect:'slip'}]));
+  c.press('Space');c.clipFinished('Jump_Start');
+  until(()=>c.state==='land',2);c.releaseAll();run(.3);
+  assert.equal(c.speed,0);assert.equal(rat.position.z,0);
+});
+
+test('ice under a jump has no effect until the feet land on it', () => {
+  const ice={x:0,z:1,w:5,d:20,top:0,effect:'slip'};
+  const {c,step:run}=makeRig(makeWorld([{...floor,w:5,d:20}],[ice]));
+  c.press('KeyW');c.press('Space');run(.1);
+  assert.equal(c.state,'air');near(c.speed,1.2,.0001,'airborne leap is unchanged');
+});
+
 test('turning cannot sweep the nose into a wall but can turn away', () => {
   const obstacle={x:.08,z:0,w:.04,d:1,y:-.1,h:.4};
   assert.equal(canTurn([obstacle],{x:0,y:0,z:0},0,Math.PI/2),false);

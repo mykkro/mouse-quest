@@ -148,6 +148,7 @@ try {
   s=await snap();
   check(s.s === 'playing' && s.z > .65 && Math.abs(s.y-.1)<.001, `walks up rooftop ramp onto higher platform (${s.s}, z ${s.z}, y ${s.y})`);
   await page.ev('ratGame.loadLevel(3)');
+  await page.screenshot(join(ROOT, 'models/rat/build/previews/moonlit-pantry.png'));
   await tp(1.1,.6075,1.7,0);
   await tap('KeyW');
   await page.waitFor('ratGame.rat.rotation.x < -.05', 3000);
@@ -157,10 +158,16 @@ try {
   await tap('KeyW');
   await page.waitFor("document.getElementById('surface-status').textContent.includes('Sticky')",3000);
   check(await page.ev("document.getElementById('surface-status').textContent.includes('Sticky')"), 'glue patch shows movement warning');
+  await page.screenshot(join(ROOT, 'models/rat/build/previews/glue.png'));
+  await tp(.25,.65,2.85,0);
+  await tap('KeyW');
+  await page.waitFor("document.getElementById('surface-status').textContent.includes('Ice')",3000);
+  check(await page.ev("document.getElementById('surface-status').textContent.includes('Ice')"), 'new pantry ice patch shows landing slide warning');
+  await page.screenshot(join(ROOT, 'models/rat/build/previews/ice.png'));
   await page.ev('ratGame.loadLevel(4)');
   await tp(0,0,2.3,0);
   await key('KeyW',true); await sleep(200); await key('KeyW',false); await sleep(80);
-  check(await page.ev("document.getElementById('surface-status').textContent.includes('Slippery') && ratGame.speed > 0"), 'wet patch coasts after key release');
+  check(await page.ev("document.getElementById('surface-status').textContent.includes('Ice') && ratGame.speed > 0"), 'ice patch coasts after key release');
   await page.ev('ratGame.loadLevel(1)');
   await tap('KeyV');
   check(await page.ev("ratGame.view === 'first-person' && ratGame.state === 'ready'"), 'V switches view without starting the run');

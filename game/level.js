@@ -82,18 +82,18 @@ const shelfRamp = pantry.route[5];
 shelfRamp.z = 2.05; shelfRamp.d = 1.2; shelfRamp.y += .09; shelfRamp.slopeZ = .15;
 for (const b of pantry.route.slice(6)) b.y += .18;
 pantry.goal.top = pantry.route.at(-1).y + pantry.route.at(-1).h;
-pantry.description = 'Climb the crates and sloping shelf. Amber glue slows your paws.';
+pantry.description = 'Climb crates and shelves under the moon and stars. Glue slows your paws; icy landings boost your slide.';
 pantry.patches = [{ x:1.1,z:2.85,w:.42,d:.3,top:.75,effect:'glue' }];
 levels[4].patches = [
   {x:0,z:2.3,w:.4,d:.38,top:0,effect:'slip'},
   {x:0,z:3.7,w:.4,d:.38,top:0,effect:'slip'},
 ];
-levels[4].description = 'Blue wet grates are slippery. Ease off early and leave room to stop.';
+levels[4].description = 'Frosted grates are slippery. Icy landings boost your slide: brake early and leave room to stop.';
 levels[5].patches = [
   {x:1.2,z:3.25,w:.4,d:.35,top:.4,effect:'glue'},
   {x:-.4,z:4,w:.09,d:.55,top:.2,effect:'slip'},
 ];
-levels[5].description = 'Amber glue grips; blue spills slide. Choose your approach to the last leap.';
+levels[5].description = 'Amber glue grips; icy landings boost your slide. Choose your approach to the last leap.';
 // A broad detour through a sticky maze, with a clear strip along either edge.
 const pipes = levels[1];
 pipes.patches = [{x:.55,z:1.4,w:.45,d:.12,top:0,effect:'glue'}];
@@ -284,3 +284,15 @@ moving(9,{dz:.65,period:7.5});
 // Docks clear the turntable's full swept radius; shuttles stop 7.5 cm short of docks.
 clockwork.killY=-.65;
 levels.push(clockwork);
+
+// Extra ice on roomy, flat landing pads. Leave starts, goals, ramps and moving
+// platforms clear, with a dry margin for players who want to avoid the slide.
+for (const [index, pads] of [[1,[3,5]], [2,[2,4,7]], [3,[2,7,8]], [4,[1,4]], [5,[3,8]], [9,[2,6,8]]]) {
+  const course=levels[index];
+  course.patches ??= [];
+  for(const padIndex of pads) {
+    const b=course.route[padIndex];
+    if(!b || b.motion || b.slopeX || b.slopeZ) continue;
+    course.patches.push({x:b.x,z:b.z,w:b.w*.8,d:b.d*.72,top:b.y+b.h,effect:'slip'});
+  }
+}
