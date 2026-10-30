@@ -230,5 +230,6 @@ export function createController({ rat, actions, speeds, play, current, world = 
     clipFinished, update, reset,
     get state() { return state; },
     get speed() { return speed; },
+    get hasInput() { return held.size > 0; },
   };
 }

@@ -19,7 +19,8 @@ test('the site build contains the game, the viewer and the model, and nothing el
     const files = filesUnder(out).map((f) => relative(out, f).replaceAll('\\', '/')).sort();
     assert.deepEqual(files, [
       '.nojekyll',
-      'game/collision.js', 'game/i18n.js', 'game/index.html', 'game/level.js', 'game/motion.js', 'game/scenery.js',
+      'game/collision.js', 'game/fonts/OFL.txt', 'game/fonts/baloo-2.ttf',
+      'game/i18n.js', 'game/idle.js', 'game/index.html', 'game/level.js', 'game/motion.js', 'game/scenery.js',
       'index.html',
       'models/rat/dist/rat.glb',
       'models/rat/viewer/camera.js', 'models/rat/viewer/clip-player.js',

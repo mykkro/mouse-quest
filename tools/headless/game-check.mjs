@@ -199,6 +199,25 @@ try {
   check(await page.ev("ratGame.language==='cs' && document.documentElement.lang==='cs'"),'Czech preference survives reload');
   await page.ev("{const select=document.getElementById('language');select.value='en';select.dispatchEvent(new Event('change'));}");
   check(await page.ev("document.title==='Mouse Quest' && document.getElementById('retry').textContent==='Restart'"),'switches back to English');
+  await page.ev('ratGame.loadLevel(3)');
+  const idleStart=await snap();
+  await page.waitFor('ratGame.idleMode',22000);
+  check(await page.ev("ratGame.animation==='Sniff'"),'idle rat starts with its existing sniff animation');
+  await sleep(1800);
+  const orbitStart=await page.ev('ratGame.camera.position.toArray()');
+  await sleep(700);
+  check(await page.ev(`ratGame.camera.position.distanceTo(new ratGame.camera.position.constructor(...${JSON.stringify(orbitStart)}))>.03`),'idle camera slowly orbits');
+  check(await page.ev('ratGame.camera.position.distanceTo(ratGame.rat.position)>1.3'),'idle camera pulls back from the rat');
+  const idleEnd=await snap();
+  near(Math.hypot(idleEnd.x-idleStart.x,idleEnd.y-idleStart.y,idleEnd.z-idleStart.z),0,.000001,'idle animation leaves rat on its platform');
+  await page.screenshot(join(ROOT,'models/rat/build/previews/idle-orbit.png'));
+  await page.ev("dispatchEvent(new PointerEvent('pointermove',{clientX:12,clientY:12}))");
+  check(await page.ev("!ratGame.idleMode && ratGame.animation==='Idle' && !document.getElementById('hud').hidden"),'mouse movement restores normal ready view');
+  await tap('KeyV');
+  await page.waitFor('ratGame.idleMode',22000);
+  check(await page.ev('ratGame.camera.layers.isEnabled(1) && ratGame.camera.fov===50'),'idle orbit shows the rat even from first-person mode');
+  await key('KeyW',true);await sleep(150);await key('KeyW',false);
+  check(await page.ev("!ratGame.idleMode && ratGame.view==='first-person' && ratGame.camera.fov===80 && !ratGame.camera.layers.isEnabled(1) && ratGame.state==='playing'"),'movement immediately restores first-person play');
   check(page.errors().length === 0, `no console errors (${page.errors().join('; ') || 'none'})`);
 } finally {
   page.close();
